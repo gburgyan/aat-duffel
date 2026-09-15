@@ -1,0 +1,5 @@
+name: depart-in-6-months
+description: Departing 180 days from today
+selectionHint: A trip booked months ahead
+inputs:
+  createOfferRequest.departureDate: "{{today + 180 days}}"

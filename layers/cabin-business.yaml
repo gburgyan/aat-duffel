@@ -1,0 +1,5 @@
+name: cabin-business
+description: Business class on every flight
+selectionHint: Business class
+inputs:
+  createOfferRequest.cabinClass: business

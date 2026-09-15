@@ -1,0 +1,13 @@
+# The search-only row of the layer matrix, with no orders. It sets no route, cabin, date, journey, or party, so every
+# layer reaches it, and Find Offer checks the Duffel Airways offer against the search: its airports, dates, slices,
+# passengers, and the cabin of every flight.
+kind: recipe
+metadata:
+  prompt: Search and read the Duffel Airways offer for whatever the layers ask
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: The Duffel Airways offer for the layers' search, direct flights only
+overrides:
+  values:
+    offers.maxConnections: 0

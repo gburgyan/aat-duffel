@@ -37,6 +37,9 @@ response:
       path: data.conditions.refund_before_departure.penalty_amount
       default: ""
     sliceCount: 'data.slices.#'
+    passengerCount: 'data.passengers.#'
+    firstSliceOrigin: data.slices.0.origin.iata_code
+    firstSliceDestination: data.slices.0.destination.iata_code
     firstSliceSegmentCount: 'data.slices.0.segments.#'
     firstSegmentStopCount:
       path: 'data.slices.0.segments.0.stops.#'
@@ -137,4 +140,25 @@ response:
     for _, p in ipairs(infants) do table.insert(booking, p) end
     outputs.bookingPassengers = booking
     if #carers > 0 then outputs.infantCarers = carers end
+
+    -- The departure date of the first two slices, and every flight's cabin, to compare with the search.
+    local function departureDate(slice)
+      local first = ((slice or {}).segments or {})[1] or {}
+      return string.sub(first.departing_at or "", 1, 10)
+    end
+    outputs.firstSliceDepartureDate = departureDate(slices[1])
+    outputs.secondSliceDepartureDate = departureDate(slices[2])
+    local seen, cabins = {}, {}
+    for _, slice in ipairs(slices) do
+      for _, flight in ipairs(slice.segments or {}) do
+        for _, p in ipairs(flight.passengers or {}) do
+          if p.cabin_class and not seen[p.cabin_class] then
+            seen[p.cabin_class] = true
+            table.insert(cabins, p.cabin_class)
+          end
+        end
+      end
+    end
+    table.sort(cabins)
+    outputs.cabinClasses = table.concat(cabins, ",") .. ""
     return outputs

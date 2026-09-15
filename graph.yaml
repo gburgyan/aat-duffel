@@ -491,6 +491,16 @@ nodes:
             type: string
           - name: age
             type: integer
+      - name: firstSliceOrigin
+        type: string
+        description: The first slice's origin as Duffel echoes the search
+      - name: firstSliceDestination
+        type: string
+      - name: firstSliceDepartureDate
+        type: string
+      - name: secondSliceDepartureDate
+        type: string
+        description: The second slice's departure date; "" for a one-way search
     satisfies: [offersRequested]
 
   listOffers:
@@ -773,6 +783,21 @@ nodes:
             type: string
           - name: infantPassengerId
             type: string
+      - name: passengerCount
+        type: integer
+      - name: firstSliceOrigin
+        type: string
+      - name: firstSliceDestination
+        type: string
+      - name: firstSliceDepartureDate
+        type: string
+        description: The first flight's local departure date
+      - name: secondSliceDepartureDate
+        type: string
+        description: The second slice's first flight's local departure date; "" for one slice
+      - name: cabinClasses
+        type: string
+        description: Every flight's cabin, distinct and sorted, joined by commas
     satisfies: [offerSelected]
 
   priceOffer:
@@ -1269,6 +1294,10 @@ nodes:
         type: string
       - name: totalBeforeChanges
         type: string
+      - name: secondSliceDepartureDate
+        type: string
+      - name: cabinClasses
+        type: string
     cleanup:
       node: createOrderCancellation
       when: cancellable == true
@@ -1389,6 +1418,12 @@ nodes:
       - name: totalBeforeChanges
         type: string
         description: The total less every confirmed change's change_total_amount
+      - name: secondSliceDepartureDate
+        type: string
+        description: The second slice's local departure date; "" for one slice
+      - name: cabinClasses
+        type: string
+        description: Every flight's cabin, distinct and sorted, joined by commas
 
   updateOrder:
     description: >-

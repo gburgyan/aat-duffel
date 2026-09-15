@@ -29,7 +29,10 @@ concepts:
     description: >-
       Every response reports the token's budget in lowercase headers: ratelimit-limit (4000 a
       minute), ratelimit-remaining, and ratelimit-reset, an HTTP date at the end of the current
-      minute. Each also carries x-request-id, the ID to quote to Duffel support.
+      minute. Each also carries x-request-id, the ID to quote to Duffel support. Searches (POST
+      /air/offer_requests) have a budget of their own, 30 a minute, and past it Duffel answers 429
+      rate_limit_exceeded (a rate_limit_error) until ratelimit-reset. Find Offer and Book Flight
+      retry a refused search, which waits for that reset.
     applies_to: [rateLimitLimit, rateLimitRemaining]
 
   places:
@@ -253,6 +256,15 @@ concepts:
       run. Proven by plans/account/webhooks.yaml.
     applies_to: [webhookId, events, active, deliveryCount, eventId]
     constraint: delete the webhook when done, since another can't be created while it exists
+
+  journeyMatchesSearch:
+    description: >-
+      A Duffel Airways offer, and the order booked from it, echo the search: the first slice's airports and local
+      departure date, the second slice's departure date, how many slices and passengers, and the searched cabin on
+      every flight. Find Offer and Book Flight assert it on the offer, and each payment slot on the order as it's
+      booked, so a run of plans/matrix/ with any layers proves the layers took effect.
+    applies_to: [firstSliceOrigin, firstSliceDestination, firstSliceDepartureDate, secondSliceDepartureDate, cabinClasses]
+    constraint: compare cabinClasses, the cabin of every flight, not only the first slice's
 
   productAccess:
     description: >-

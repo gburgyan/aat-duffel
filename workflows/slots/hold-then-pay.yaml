@@ -17,6 +17,12 @@ execution:
             expr: >-
               liveMode == false && orderType == "hold" && awaitingPayment == true && paymentRequiredBy != "" &&
               totalAmount == "{{price.totalAmount}}" && serviceCount == "{{price.intendedServiceCount}}"
+          - type: predicate
+            expr: >-
+              firstSliceOrigin == "{{search.firstSliceOrigin}}" && firstSliceDestination == "{{search.firstSliceDestination}}" &&
+              firstSliceDepartureDate == "{{search.firstSliceDepartureDate}}" &&
+              secondSliceDepartureDate == "{{search.secondSliceDepartureDate}}" && sliceCount == "{{search.sliceCount}}" &&
+              passengerCount == "{{search.passengerCount}}" && cabinClasses == "{{search.cabinClass}}"
 
     - id: pay
       node: createPayment

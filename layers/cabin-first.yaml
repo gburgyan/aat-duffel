@@ -1,0 +1,5 @@
+name: cabin-first
+description: First class on every flight
+selectionHint: First class
+inputs:
+  createOfferRequest.cabinClass: first

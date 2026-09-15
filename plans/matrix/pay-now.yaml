@@ -1,0 +1,12 @@
+# A row of the layer matrix: book and pay at once from the balance. It sets no route, cabin, date, journey, or party,
+# so every layer reaches it. Book Flight checks the offer and the order against the search, and the Pay Now slot
+# checks the payment. Cleanup cancels the order.
+kind: recipe
+metadata:
+  prompt: Book and pay at once for whatever the layers ask
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: Paid at once, for the layers' search
+  choices:
+    payment: Pay Now

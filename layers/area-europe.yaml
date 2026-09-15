@@ -1,0 +1,6 @@
+name: area-europe
+description: A short hop within Europe, London Gatwick to Barcelona
+selectionHint: A short-haul trip within Europe
+inputs:
+  createOfferRequest.origin: LGW
+  createOfferRequest.destination: BCN

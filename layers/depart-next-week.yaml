@@ -1,0 +1,5 @@
+name: depart-next-week
+description: Departing a week from today
+selectionHint: A trip next week
+inputs:
+  createOfferRequest.departureDate: "{{today + 7 days}}"

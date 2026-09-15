@@ -1,0 +1,6 @@
+name: area-us-domestic
+description: A US domestic flight, New York JFK to Los Angeles
+selectionHint: A flight within the United States
+inputs:
+  createOfferRequest.origin: JFK
+  createOfferRequest.destination: LAX

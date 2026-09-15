@@ -1,0 +1,6 @@
+name: area-asia-pacific
+description: A long flight across Asia-Pacific, Sydney to Singapore
+selectionHint: A trip in Asia or the Pacific
+inputs:
+  createOfferRequest.origin: SYD
+  createOfferRequest.destination: SIN

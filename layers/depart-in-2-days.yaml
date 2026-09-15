@@ -1,0 +1,7 @@
+name: depart-in-2-days
+description: >-
+  Departing two days from the runner's date. Two rather than one, since the runner's today can already be tomorrow
+  at the airport.
+selectionHint: A trip booked at short notice
+inputs:
+  createOfferRequest.departureDate: "{{today + 2 days}}"

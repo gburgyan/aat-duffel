@@ -100,6 +100,22 @@ response:
     outputs.firstSliceDepartureTime = firstSlice.departureTime or ""
     outputs.firstSliceOrigin = firstSlice.origin or ""
     outputs.firstSliceDestination = firstSlice.destination or ""
+    outputs.secondSliceDepartureDate = (slices[2] or {}).departureDate or ""
+
+    -- Every flight's cabin, distinct and sorted, joined by commas.
+    local seen, cabins = {}, {}
+    for _, slice in ipairs(orderSlices) do
+      for _, flight in ipairs(slice.segments or {}) do
+        for _, p in ipairs(flight.passengers or {}) do
+          if p.cabin_class and not seen[p.cabin_class] then
+            seen[p.cabin_class] = true
+            table.insert(cabins, p.cabin_class)
+          end
+        end
+      end
+    end
+    table.sort(cabins)
+    outputs.cabinClasses = table.concat(cabins, ",") .. ""
 
     local seats, bags = 0, 0
     for _, service in ipairs(order.services or {}) do

@@ -1,0 +1,5 @@
+name: cabin-premium-economy
+description: Premium economy on every flight
+selectionHint: Premium economy seats
+inputs:
+  createOfferRequest.cabinClass: premium_economy

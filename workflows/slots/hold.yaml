@@ -18,3 +18,9 @@ execution:
               liveMode == false && orderType == "hold" && awaitingPayment == true && paidAt == "" &&
               paymentRequiredBy != "" && priceGuaranteeExpiresAt != "" && totalAmount == "{{price.totalAmount}}" &&
               serviceCount == "{{price.intendedServiceCount}}" && metadataSource == "aat-duffel"
+          - type: predicate
+            expr: >-
+              firstSliceOrigin == "{{search.firstSliceOrigin}}" && firstSliceDestination == "{{search.firstSliceDestination}}" &&
+              firstSliceDepartureDate == "{{search.firstSliceDepartureDate}}" &&
+              secondSliceDepartureDate == "{{search.secondSliceDepartureDate}}" && sliceCount == "{{search.sliceCount}}" &&
+              passengerCount == "{{search.passengerCount}}" && cabinClasses == "{{search.cabinClass}}"

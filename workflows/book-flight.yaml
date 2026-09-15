@@ -7,6 +7,10 @@ execution:
     - id: search
       node: createOfferRequest
       description: Search for flights; a test token never reaches live offers
+      # Duffel allows 30 searches a minute per token. A 429 retry waits for RateLimit-Reset, the next minute.
+      retry:
+        max: 3
+        on: [429]
       assertions:
         mechanical:
           - type: predicate
@@ -40,6 +44,12 @@ execution:
         mechanical:
           - type: predicate
             expr: ownerCode == "ZZ" && liveMode == false
+          - type: predicate
+            expr: >-
+              firstSliceOrigin == "{{search.firstSliceOrigin}}" && firstSliceDestination == "{{search.firstSliceDestination}}" &&
+              firstSliceDepartureDate == "{{search.firstSliceDepartureDate}}" &&
+              secondSliceDepartureDate == "{{search.secondSliceDepartureDate}}" && sliceCount == "{{search.sliceCount}}" &&
+              passengerCount == "{{search.passengerCount}}" && cabinClasses == "{{search.cabinClass}}"
 
     - id: price
       node: priceOffer

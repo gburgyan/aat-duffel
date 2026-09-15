@@ -27,6 +27,12 @@ response:
     cabinClass: data.cabin_class
     sliceCount: 'data.slices.#'
     passengerCount: 'data.passengers.#'
+    firstSliceOrigin: data.slices.0.origin.iata_code
+    firstSliceDestination: data.slices.0.destination.iata_code
+    firstSliceDepartureDate: data.slices.0.departure_date
+    secondSliceDepartureDate:
+      path: data.slices.1.departure_date
+      default: ""
     passengers:
       path: data.passengers
       fields:

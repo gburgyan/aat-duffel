@@ -6,7 +6,7 @@ against Duffel's live test API. What this README says about Duffel comes from th
 something that no plan asserts yet, and it names Duffel's docs where they're the source.
 
 **Status:** places, reference data, search, offers, booking, what comes after booking, and the account features are
-done: 66 endpoints, all run by 43 plans that pass together in about three minutes
+done: 66 endpoints, all run by 47 plans that pass together in about three and a half minutes
 ([what's not covered](#not-covered-yet)).
 
 ```text
@@ -39,8 +39,8 @@ latest` shows the run:
 
 - **AAT built from `main`.** The package uses features that aren't in v0.1.0: lists in step values, extract
   `default:`, header extraction, `repeat`, visualizer `bodyPath`, nested blocks of the same key, `repeat.next` paging,
-  and assertions that read an earlier step's output. The last two are open as gburgyan/aat#19 and #20 until they merge.
-  Building from source needs Go 1.25.7 or later, and Node.js for the web UI:
+  and assertions that read an earlier step's output. Building from source needs Go 1.25.7 or later, and Node.js for
+  the web UI:
 
   ```bash
   git clone https://github.com/gburgyan/aat.git
@@ -72,7 +72,7 @@ aat run plan search/one-way      # the run above
 aat run plan booking/instant-family-seats-bags   # book a family of four with seats and bags, then cancel it
 aat run plan after-booking/cancel-after-change   # book, change to premium economy, cancel, and check the refund
 aat run plan account/webhooks    # a webhook's whole life, its failed ping still recorded as a delivery
-aat run batch                    # all 43 plans, about three minutes; sequential, so the order guard runs last
+aat run batch                    # all 47 plans, about three and a half minutes; sequential, so the order guard runs last
 aat run batch scenarios          # only Duffel's test routes
 aat web view latest              # open the last run in the browser
 ```
@@ -86,7 +86,9 @@ aat run show latest --step offer --response --path data.conditions
 ```
 
 Long batches can use `--env test-ci`, which spaces requests 250 ms apart. Duffel allows 4000 requests a minute per
-token, so this is courtesy toward the shared test airlines, not a limit.
+token, but only 30 searches (`POST /air/offer_requests`), refused beyond that with 429 `rate_limit_exceeded` until the
+minute resets. Find Offer and Book Flight retry a refused search after the reset, so run one batch at a time: several
+at once, or `--parallel`, only waits longer.
 
 ## See it in the web UI
 
@@ -259,8 +261,8 @@ createOrderCancellation:
   cleanup: confirmOrderCancellation
 ```
 
-`aat run show <batch>` sums up what cleanup did. In the last full batch, cleanup quoted 14 cancellations and confirmed
-15 (one of them a quote a plan left unconfirmed), with 0 failures. Five plans cancelled their orders themselves, and
+`aat run show <batch>` sums up what cleanup did. In the last full batch, cleanup quoted 17 cancellations and confirmed
+18 (one of them a quote a plan left unconfirmed), with 0 failures. Five plans cancelled their orders themselves, and
 the account plans deleted their group and webhook, so those entries show as released. Then
 [`zz-no-live-orders`](plans/zz-no-live-orders.yaml), which sorts last, reads every page of the account's orders and
 fails if one of the package's orders is still active:
@@ -339,6 +341,103 @@ and the time, and stops the plan if two offers still match:
         filter: cabinClass == "premium_economy" && departureTime == "18:00"
         onTie: fail
 ```
+
+## Layers and matrix runs
+
+A layer fills inputs a plan leaves unset. The package's layers vary the search on five axes. Every one sets an input of
+`createOfferRequest`, so a change request keeps its own cabin and date.
+
+| Layers | Input | Values (and without the layer) |
+|---|---|---|
+| `area-europe`, `area-us-domestic`, `area-asia-pacific` | `origin`, `destination` | LGW → BCN, JFK → LAX, SYD → SIN (LHR → JFK) |
+| `cabin-premium-economy`, `cabin-business`, `cabin-first` | `cabinClass` | the cabin each names (economy) |
+| `depart-in-2-days`, `depart-next-week`, `depart-in-6-months` | `departureDate` | `{{today + 2 days}}`, `+ 7 days`, `+ 180 days` (`+ 30 days`) |
+| `round-trip` | `returnDate` | `{{departureDate + 7 days}}`, a week after whatever departure date the search ends up with (one-way) |
+| `party-solo`, `party-couple`, `party-trio`, `party-family` | `passengerAges` | `[35]`, `[35, 33]`, `[35, 8, 1]`, `[40, 38, 8, 1]` (`[35]`) |
+
+The nearest departure is two days out, not one, because `today` is the date where AAT runs, which can already be
+tomorrow at the airport.
+
+There's no layer for how an order is paid. Duffel's ways of paying are paying at once, holding, and holding then paying.
+They differ in their steps, not in an input, so they're Book Flight's `payment` slot, and a layer can't pick a slot.
+This account also pays only from its balance: cards and 3-D Secure answer 403. So [`plans/matrix/`](plans/matrix/) has
+one plan per way of paying, plus a search with no order, and none of them sets anything a layer sets. Crossed with layer
+groups, each plan is a row and each combination of layers a column.
+
+Every cell proves its layers took effect. Find Offer and Book Flight compare the offer with the search, and each payment
+slot compares the order as it's booked:
+
+```yaml
+- type: predicate
+  expr: >-
+    firstSliceOrigin == "{{search.firstSliceOrigin}}" && firstSliceDestination == "{{search.firstSliceDestination}}" &&
+    firstSliceDepartureDate == "{{search.firstSliceDepartureDate}}" &&
+    secondSliceDepartureDate == "{{search.secondSliceDepartureDate}}" && sliceCount == "{{search.sliceCount}}" &&
+    passengerCount == "{{search.passengerCount}}" && cabinClasses == "{{search.cabinClass}}"
+```
+
+`cabinClasses` is the cabin of every flight, so a business search that came back with an economy return would fail.
+
+Each `--layer-group` adds its layers and "none", and the groups are crossed:
+
+```bash
+# Search only, no orders: 4 area choices × 4 cabins × 4 lead times
+aat run batch matrix/find-offer --env test-ci \
+  --layer-group area-europe,area-us-domestic,area-asia-pacific \
+  --layer-group cabin-premium-economy,cabin-business,cabin-first \
+  --layer-group depart-in-2-days,depart-next-week,depart-in-6-months
+
+# Every way of paying, by party and cabin
+aat run batch matrix --env test-ci \
+  --layer-group party-solo,party-couple,party-trio,party-family \
+  --layer-group cabin-premium-economy,cabin-business,cabin-first
+
+# Every way of paying, by lead time, one-way and round trip
+aat run batch matrix --env test-ci \
+  --layer-group depart-in-2-days,depart-next-week,depart-in-6-months \
+  --layer-group round-trip
+
+aat run plan zz-no-live-orders   # after a batch that books, check that no order is left
+```
+
+Run one batch at a time, every cell passed:
+
+| Batch | Runs | Result | Time |
+|---|---|---|---|
+| Search: area × cabin × lead time | 1 plan × 64 | 64 passed | 136 s |
+| Ways of paying × party × cabin | 4 plans × 20 | 64 passed, 16 skipped | 285 s |
+| Ways of paying × lead time × round trip | 4 plans × 8 | 32 passed | 182 s |
+
+The 16 skips are dedup at work. `party-solo` sets the ages the graph already defaults to, so each of its combinations
+builds the same plan as the combination without it, and AAT runs that plan once:
+
+```text
+aat: dedup — 16 duplicate permutations detected:
+  matrix/find-offer [cabin-business, party-solo] → duplicate of matrix/find-offer [cabin-business]
+  matrix/find-offer [cabin-first, party-solo] → duplicate of matrix/find-offer [cabin-first]
+  matrix/find-offer [cabin-premium-economy, party-solo] → duplicate of matrix/find-offer [cabin-premium-economy]
+  matrix/find-offer [party-solo] → duplicate of matrix/find-offer [(base)]
+  …
+```
+
+The two booking batches cancelled all 72 orders they made, with 0 cleanup failures, and `zz-no-live-orders` passed
+after them. What the Duffel Airways offer cost for one adult, one way, a month out, in that search batch:
+
+| Area | Economy | Premium economy | Business | First |
+|---|---|---|---|---|
+| LHR → JFK | 223.32 | 347.45 | 1364.96 | 3230.44 |
+| LGW → BCN | 70.32 | 92.21 | 294.29 | 695.43 |
+| JFK → LAX | 166.54 | 256.21 | 979.27 | 2304.58 |
+| SYD → SIN | 258.21 | 383.83 | 1474.99 | 3921.31 |
+
+A batch's By Test view in the web UI draws the matrix: a row per plan, a column per combination of layers, and a filter
+for each group. Here is the second batch, with its skipped cells shown:
+
+![The By Test matrix: the four matrix plans against twenty combinations of party and cabin, with party-solo's duplicates skipped](docs/images/batch-matrix.png)
+
+Run layer groups on `plans/matrix/` only. The other plans pin what they prove to a route, a cabin, or a party. Change
+Flight expects Duffel Airways' nine change offers on LHR → JFK, for example, and a booking recipe asserts the
+passengers of the party it names, so a layer that changes those fails them by design.
 
 ## What's exercised
 
@@ -419,6 +518,8 @@ at least one plan, the cancellation nodes in cleanup.
 | [account/order-for-customer-user](plans/account/order-for-customer-user.yaml) | An order booked for a user names the user, listing orders by `user_id` finds exactly that order, and a client key covers the user and the order |
 | [account/links-sessions](plans/account/links-sessions.yaml) | A session with its required fields gets a URL on links.duffel.com, and one without them is 422 with four `validation_required` errors |
 | [account/webhooks](plans/account/webhooks.yaml) | A webhook created and listed, a second refused with `unsafe_unique`, and the first deactivated, then reactivated with two events. A failed ping is still recorded as a `ping.triggered` delivery with an event, and the deleted webhook is 404. |
+| [matrix/find-offer](plans/matrix/find-offer.yaml) | The Duffel Airways offer for whatever search the layers set, direct only, matching the search's airports, dates, slices, passengers, and cabins |
+| [matrix/pay-now](plans/matrix/pay-now.yaml), [matrix/hold](plans/matrix/hold.yaml), [matrix/hold-then-pay](plans/matrix/hold-then-pay.yaml) | One way of paying each, for whatever search the layers set, with the order matching the search as it's booked |
 | [zz-no-live-orders](plans/zz-no-live-orders.yaml) | Every page of the account's orders, read with `repeat.next`: none of the package's orders is still active |
 
 ### Duffel's test routes
@@ -468,7 +569,7 @@ find them.
 - **Offers expire** about 30 minutes after the search. Every run searches again, so plans never read stale offers
   except on purpose.
 - **Lists page with cursors.** `meta.after` is `null` on the last page. Every response carries lowercase
-  `ratelimit-*` headers (4000 requests a minute) and an `x-request-id`.
+  `ratelimit-*` headers (4000 requests a minute, 30 for searches) and an `x-request-id`.
 - **Booking takes the priced total exactly.** An instant order pays from the balance at the price action's total,
   services included, and books exactly the services priced: 20.00 for each Duffel Airways seat and each extra 23 kg
   bag.
@@ -521,17 +622,23 @@ find them.
   `webhook_client_error`, yet Duffel records the delivery: a `ping.triggered` event with the status the URL answered
   (405 from example.com in the runs). A deleted webhook is 404 to update. Redelivering the event answered 500
   `internal_server_error` in a run, so no plan does it.
+- **Short notice and far ahead.** In the runs, Duffel Airways sold LHR to JFK from one day to 360 days out. A hold
+  departing the next day was still due 72 hours after the search, after the flight had left, with its price
+  guaranteed for 48 hours. No plan asserts that.
 
 ## AAT features on display
 
 | Feature | In this package |
 |---|---|
 | Workflows, addons, and recipes | [Find Offer](workflows/find-offer.yaml), [Book Flight](workflows/book-flight.yaml), and their [addons](workflows/addons/). Most plans are short recipes that reuse them. |
-| Slots and layers | Book Flight's `payment` slot picks Pay Now, Hold, or Hold Then Pay, and [party layers](layers/) set one to four passengers |
+| Slots and layers | Book Flight's `payment` slot picks Pay Now, Hold, or Hold Then Pay, and [layers](layers/) set a search's area, cabin, lead time, journey, and party |
+| Relative dates in layers | `departureDate: "{{today + 2 days}}"`, and `returnDate: "{{departureDate + 7 days}}"`, which follows whatever departure date another layer sets |
+| Layer groups and dedup | `--layer-group` crosses [`plans/matrix/`](plans/matrix/) with every combination of layers, and `party-solo`, which equals the default, is skipped as a duplicate |
+| Step retries | The search step retries a 429, which waits for Duffel's `ratelimit-reset` |
 | Cleanup chains | `createOrder` → `createOrderCancellation` → `confirmOrderCancellation`, with `when: cancellable == true`. A plan's own quote and confirmation release the entries, and `aat run show <batch>` sums up every cleanup |
 | Addon order | Change Flight, Airline-Initiated Change, and Cancel Order all insert after the booking; `priority: 10` keeps Cancel Order last |
 | Paging with `repeat.next` | [`zz-no-live-orders`](plans/zz-no-live-orders.yaml) reads every page of the account's orders, and fails if a listing is cut off |
-| Assertions across steps | `serviceCount == "{{price.intendedServiceCount}}"` in the Pay Now slot, `totalBeforeChanges == "{{book.totalAmount}}"` after a change, and `refundAmount == "{{inc0_afterChange.totalAmount}}"` in [cancel-after-change](plans/after-booking/cancel-after-change.yaml) |
+| Assertions across steps | `cabinClasses == "{{search.cabinClass}}"` on every offer and order, `serviceCount == "{{price.intendedServiceCount}}"` in the Pay Now slot, `totalBeforeChanges == "{{book.totalAmount}}"` after a change, and `refundAmount == "{{inc0_afterChange.totalAmount}}"` in [cancel-after-change](plans/after-booking/cancel-after-change.yaml) |
 | Selection by filter | `select: {strategy: match, field: id, filter: ownerCode == "ZZ"}` picks the offer in Find Offer, and Change Flight picks a change offer by cabin and time with `onTie: fail` |
 | Repeating a read until a condition holds | [`search/batch`](plans/search/batch.yaml): `repeat` with `until`, `collect`, `interval`, `max`, and `timeout` |
 | Expected failures, checked by error code | [`search-timeout`](plans/scenarios/search-timeout.yaml), [`offer-gone`](plans/scenarios/offer-gone.yaml), the three order-side routes, and [Upsell Refused](workflows/addons/upsell-refused.yaml) |
@@ -566,12 +673,13 @@ graph.yaml          66 nodes: each endpoint's inputs and outputs, and what Duffe
 templates/          one request and response template per node
 domain.yaml         what the plans proved about Duffel, as concepts
 workflows/          Find Offer, Book Flight with its payment slots, and their addons
-layers/             parties of one to four passengers
+layers/             travel areas, cabins, lead times, a round trip, and parties of one to four
 plans/reference/    places, airports, cities, airlines, aircraft, and loyalty programmes
 plans/search/       searches, offers, pricing, seat maps, loyalty, upsells, and batch search
 plans/booking/      orders paid at once or held, with seats, bags, loyalty, and metadata
 plans/after-booking/  changes, cancellations, services, airline-initiated changes, and airline credits
 plans/account/      customer users and groups, component client keys, Links sessions, and webhooks
+plans/matrix/       one plan per way of paying, plus a search, to run with layer groups
 plans/scenarios/    Duffel's test routes, search and order side
 plans/zz-no-live-orders.yaml   the guard that no order the package booked is left active
 visualizers/        the Offers, Seat map, Order, and Change offers tabs for the web UI

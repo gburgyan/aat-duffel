@@ -1,0 +1,7 @@
+name: round-trip
+description: >-
+  Out and back, returning a week after departure. The return date follows whatever departure date the search ends up
+  with, so it composes with the depart-* layers.
+selectionHint: A return journey rather than one-way
+inputs:
+  createOfferRequest.returnDate: "{{departureDate + 7 days}}"
