@@ -1,0 +1,22 @@
+# Duffel's LTN to SYD test route refunds a cancellation as airline credits rather than to the balance:
+# the quote carries one credit for the whole total, and the cancelled order says where the refund went.
+# Each run leaves one credit on the account, since credits can't be deleted.
+kind: recipe
+metadata:
+  prompt: Book on the airline credits test route, cancel, and check the refund goes to credits
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: One adult from LTN to SYD, cancelled to airline credits
+  choices:
+    payment: Pay Now
+  addons: [Cancel Order]
+  layers: [party-solo]
+overrides:
+  values:
+    search.origin: LTN
+    search.destination: SYD
+  assertions:
+    inc0_quote:
+      - type: predicate
+        expr: 'refundTo == "airline_credits" && airlineCreditCount == 1 && refundAmount == "{{inc0_current.totalAmount}}"'

@@ -1,0 +1,22 @@
+adapter: getOrderCancellation
+protocol: http
+
+request:
+  method: GET
+  path: /air/order_cancellations/{{orderCancellationId}}
+
+response:
+  extract:
+    orderCancellationId: data.id
+    refundAmount:
+      path: data.refund_amount
+      default: ""
+    refundTo:
+      path: data.refund_to
+      default: ""
+    expiresAt:
+      path: data.expires_at
+      default: ""
+    confirmedAt:
+      path: data.confirmed_at
+      default: ""

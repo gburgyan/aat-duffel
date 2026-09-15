@@ -100,7 +100,9 @@ concepts:
       refuses a balance payment with 422 insufficient_balance (an invalid_state_error), and an order
       paid at LHR to STN's earlier price is refused with 422 payment_amount_does_not_match_order_amount
       (a validation_error). None of the refused orders exists afterwards. Proven by the plans under
-      plans/scenarios/.
+      plans/scenarios/. After booking, LHR to LTN gives an order airline-initiated changes, and LTN to SYD
+      refunds a cancellation as airline credits; proven by plans/after-booking/airline-initiated-change.yaml
+      and plans/after-booking/cancel-to-airline-credits.yaml.
     applies_to: [origin, destination]
 
   orders:
@@ -122,9 +124,11 @@ concepts:
       it is awaiting payment, due 72 hours after the offer request was created, with its price
       guaranteed for 48 hours, and seats and bags can be held with it. POST /air/payments at the held
       total pays it (status succeeded, type balance), after which the order is no longer awaiting
-      payment and its total is unchanged; GET /air/payments?order_id= lists the one payment. Proven by
-      plans/booking/hold-couple.yaml and plans/booking/hold-then-pay-trio-seats.yaml.
-    applies_to: [orderType, awaitingPayment, paymentRequiredBy, priceGuaranteeExpiresAt, paymentId]
+      payment and its total is unchanged; GET /air/payments?order_id= lists the one payment. A payment's
+      type must be balance or card: an airline credit is refused with 422 validation_inclusion. Proven by
+      plans/booking/hold-couple.yaml, plans/booking/hold-then-pay-trio-seats.yaml, and
+      plans/after-booking/airline-credits.yaml.
+    applies_to: [orderType, awaitingPayment, paymentRequiredBy, priceGuaranteeExpiresAt, paymentId, paymentType]
 
   servicesAtBooking:
     description: >-
@@ -140,8 +144,68 @@ concepts:
       cancellation quote, then its confirmation. plans/zz-no-live-orders.yaml reads every page of the
       account's orders and fails when one of the package's orders is still active; orders from other
       sources are counted apart. When the package was built the account held 267 orders from earlier
-      projects, none of them active.
+      projects, none of them active. A plan that quotes or confirms the cancellation itself releases the
+      matching cleanup entry, and a quote left unconfirmed is confirmed by its own cleanup
+      (plans/after-booking/cancel-quote-then-cleanup.yaml).
     applies_to: [ourOrderCount, ourActiveOrderCount, otherActiveOrderCount]
+
+  orderChanges:
+    description: >-
+      A change request replaces one slice of a booked order with a journey on a new date in a requested
+      cabin. For a Duffel Airways order from LHR to JFK it offers nine changes: economy, premium economy,
+      and first, each at 06:00, 12:00, and 18:00, each costing 125.00 with a 25.00 penalty. Business is
+      never offered, even when asked for. Choosing an offer makes a pending change; confirming it pays
+      change_total_amount from the balance, after which the order's total is the old total plus exactly
+      that amount, the seats and bags on the replaced slice are gone (a round trip keeps the return
+      flight's seats), and the order allows only cancel and update. A second change request is 422
+      order_not_changeable (an invalid_state_error). Proven by the plans under plans/after-booking/ whose
+      names start with change-.
+    applies_to: [orderChangeRequestId, changeOffers, orderChangeOfferId, orderChangeId, changeTotalAmount, totalBeforeChanges]
+    constraint: >-
+      select the change offer by cabin and departure time together and fail on a tie; the nine offers
+      cost the same, so the cheapest is not a choice
+
+  cancellations:
+    description: >-
+      A cancellation is quoted, then confirmed. A paid order's quote refunds the whole total to the
+      balance, including what a confirmed change cost; an unpaid hold's refunds 0.00 to awaiting_payment.
+      The quote reads back unconfirmed and is the order's one cancellation until it is confirmed.
+      Afterwards the order allows only update, and both a second quote and a second confirmation are 422
+      already_cancelled (an invalid_state_error). Proven by the plans under plans/after-booking/ whose
+      names start with cancel-.
+    applies_to: [orderCancellationId, refundAmount, refundTo, cancelledAt]
+    constraint: quote an order's cancellation once; a plan that cancels explicitly leaves cleanup nothing to do
+
+  servicesAfterBooking:
+    description: >-
+      Duffel Airways sells seats and bags only with the order. A booked order, paid or held, lists no
+      available services, and adding the checked bag its offer sold is 400 "Unsupported operation" (an
+      invalid_request_error whose code is the number 400). Sending a payment with a service for a held
+      order is refused first, with 422 pay_later_order_no_payment_for_ancillaries. Proven by
+      plans/after-booking/services-after-booking.yaml and plans/after-booking/services-after-hold.yaml.
+    applies_to: [serviceId, serviceCount]
+    constraint: buy seats and bags when booking
+
+  airlineInitiatedChanges:
+    description: >-
+      On Duffel's LHR to LTN test route, every read of an order's airline-initiated changes makes Duffel
+      Airways move the flight again, an hour later each time in the runs, and the order's slice shows the
+      new time at once. A change starts with no action taken and offers accept, cancel, and change. Only
+      the latest change can be accepted; an older one is 422 stale_airline_initiated_change_accept. After
+      accepting it the order still allows cancel, change, and update, and cancels normally. Proven by
+      plans/after-booking/airline-initiated-change.yaml, which reads the list once.
+    applies_to: [airlineInitiatedChangeCount, latestAirlineInitiatedChangeId, latestAvailableActions]
+    constraint: read the list once, then accept latestAirlineInitiatedChangeId
+
+  airlineCredits:
+    description: >-
+      A cancellation on Duffel's LTN to SYD test route refunds to airline_credits, and its quote carries
+      one credit for the whole total. POST /air/airline_credits records a credit whose code is a 13-digit
+      ticket number (letters are 422 validation_format); it reads back unspent, with no order, and appears
+      in the account's list. Credits can't be spent through POST /air/payments, and every run that creates
+      or refunds one leaves it on the account. Proven by plans/after-booking/cancel-to-airline-credits.yaml
+      and plans/after-booking/airline-credits.yaml.
+    applies_to: [airlineCreditId, airlineCreditCount, code]
 
   productAccess:
     description: >-
@@ -162,7 +226,9 @@ types:
       A Duffel identifier: a prefix naming the resource, an underscore, and an opaque body.
       Reference data uses arp_ (airport), cit_ (city), arl_ (airline), arc_ (aircraft), and loy_
       (loyalty programme); searches orq_ (offer request), off_ (offer), pas_ (passenger), sli_
-      (slice), and seg_ (segment); orders ord_ (order), ase_ (service), and pay_ (payment).
+      (slice), and seg_ (segment); orders ord_ (order), ase_ (service), and pay_ (payment); after
+      booking ocr_ (change request), oco_ (change offer), oce_ (change), ore_ (cancellation), aic_
+      (airline-initiated change), and acd_ (airline credit).
     format: string
     validation: "^[a-z]{3}_[A-Za-z0-9_]+$"
 

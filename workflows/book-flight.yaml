@@ -55,8 +55,8 @@ execution:
 
   verification:
     - node: getOrder
-      purpose: The order is booked in test mode, tagged as this package's, and not cancelled
+      purpose: The order is booked in test mode and tagged as this package's (an addon may have cancelled it)
       assertions:
         mechanical:
           - type: predicate
-            expr: 'liveMode == false && cancelledAt == "" && metadataSource == "aat-duffel"'
+            expr: 'liveMode == false && metadataSource == "aat-duffel"'

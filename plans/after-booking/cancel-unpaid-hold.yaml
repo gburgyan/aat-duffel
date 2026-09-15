@@ -1,0 +1,21 @@
+# Two adults held unpaid, then cancelled: nothing was paid, so the refund is 0.00 and goes to
+# awaiting_payment. The plan's own steps release both cleanup entries.
+kind: recipe
+metadata:
+  prompt: Hold a flight for two, then cancel the hold
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: Two adults held unpaid, then cancelled
+  choices:
+    payment: Hold
+  addons: [Cancel Order]
+  layers: [party-couple]
+overrides:
+  assertions:
+    inc0_current:
+      - type: predicate
+        expr: awaitingPayment == true
+    inc0_quote:
+      - type: predicate
+        expr: 'refundAmount == "0.00" && refundTo == "awaiting_payment"'

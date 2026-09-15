@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Change offers</title>
+<style>
+  body {
+    margin: 0;
+    padding: 12px;
+    background: var(--color-bg, #0f1117);
+    color: var(--color-text, #e4e4e7);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    font-size: 13px;
+  }
+  h1 { margin: 0; font-size: 15px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 8px; }
+  .muted { color: var(--color-text-secondary, #a1a1aa); }
+  .code { font-family: var(--font-mono, ui-monospace, monospace); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+  .chip { padding: 2px 8px; border: 1px solid var(--color-border, #2a2d3a); border-radius: 999px; font-size: 12px; white-space: nowrap; }
+  .num { font-family: var(--font-mono, ui-monospace, monospace); white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: separate; border-spacing: 6px; }
+  th { color: var(--color-text-secondary, #a1a1aa); font-size: 12px; font-weight: 500; text-align: left; padding: 0 4px; white-space: nowrap; }
+  th.time { font-family: var(--font-mono, ui-monospace, monospace); color: var(--color-text, #e4e4e7); }
+  td { min-width: 120px; padding: 6px 8px; border-radius: 6px; vertical-align: top; }
+  td.offer { border: 1px solid var(--color-success, #4ade80); background: var(--color-surface, #171a23); }
+  td.none { border: 1px dashed var(--color-border, #2a2d3a); color: var(--color-text-secondary, #a1a1aa); }
+  .cost { font-weight: 600; }
+  .detail { font-size: 11px; color: var(--color-text-secondary, #a1a1aa); }
+</style>
+</head>
+<body>
+<div id="root"><p class="muted">Waiting for data…</p></div>
+<script>
+(function () {
+  'use strict';
+
+  // Every cabin gets a column, so a cabin the airline doesn't offer shows as an empty column.
+  var CABINS = [
+    ['economy', 'Economy'],
+    ['premium_economy', 'Premium economy'],
+    ['business', 'Business'],
+    ['first', 'First'],
+  ];
+
+  // Build nodes with textContent only: the body comes from the API under test.
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (key) {
+      if (key === 'text') {
+        node.textContent = attrs[key];
+      } else {
+        node.setAttribute(key, attrs[key]);
+      }
+    });
+    (children || []).forEach(function (child) {
+      if (child) node.appendChild(child);
+    });
+    return node;
+  }
+
+  function money(amount, currency) {
+    var value = parseFloat(amount);
+    if (isNaN(value)) return '';
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency }).format(value);
+    } catch (e) {
+      return value.toFixed(2) + ' ' + currency;
+    }
+  }
+
+  // Times as the API gives them, local to the airport: 2026-10-22T18:00:00 becomes 2026-10-22 18:00.
+  function localTime(iso) {
+    return (iso || '').replace('T', ' ').slice(0, 16);
+  }
+
+  function describeSlice(slice) {
+    var segment = ((slice || {}).segments || [])[0] || {};
+    return ((slice.origin || {}).iata_code || '?') + ' → ' + ((slice.destination || {}).iata_code || '?') + ' ' + localTime(segment.departing_at);
+  }
+
+  // A change request carries its offers in data.order_change_offers; the offer list is data itself.
+  function offersOf(body) {
+    var data = body && body.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.order_change_offers)) return data.order_change_offers;
+    return null;
+  }
+
+  function render(body) {
+    var root = document.getElementById('root');
+    root.textContent = '';
+    var offers = offersOf(body);
+    if (!offers) {
+      root.appendChild(el('p', { 'class': 'muted', text: 'No change offers in this response.' }));
+      return;
+    }
+
+    var grid = {};
+    var times = [];
+    var removed = null;
+    var date = '';
+    offers.forEach(function (offer) {
+      var slices = offer.slices || {};
+      var added = (slices.add || [])[0] || {};
+      var segment = (added.segments || [])[0] || {};
+      var cabin = ((segment.passengers || [])[0] || {}).cabin_class || '?';
+      var time = (segment.departing_at || '').slice(11, 16);
+      if (!removed && (slices.remove || []).length) removed = slices.remove[0];
+      if (!date) date = (segment.departing_at || '').slice(0, 10) + '  ' + ((added.origin || {}).iata_code || '?') + ' → ' + ((added.destination || {}).iata_code || '?');
+      if (times.indexOf(time) < 0) times.push(time);
+      (grid[time + '|' + cabin] = grid[time + '|' + cabin] || []).push(offer);
+    });
+    times.sort();
+
+    root.appendChild(el('header', null, [
+      el('h1', { text: offers.length + ' change offer' + (offers.length === 1 ? '' : 's') }),
+      el('span', { 'class': 'muted', text: date }),
+    ]));
+    var chips = [];
+    if (removed) chips.push(el('span', { 'class': 'chip', text: 'replaces ' + describeSlice(removed) }));
+    var missing = CABINS.filter(function (c) {
+      return !times.some(function (t) { return grid[t + '|' + c[0]]; });
+    }).map(function (c) { return c[1]; });
+    if (missing.length) chips.push(el('span', { 'class': 'chip', text: 'not offered: ' + missing.join(', ') }));
+    root.appendChild(el('div', { 'class': 'chips' }, chips));
+
+    var head = el('tr', null, [el('th', { text: 'Departs' })].concat(CABINS.map(function (c) { return el('th', { text: c[1] }); })));
+    var rows = times.map(function (time) {
+      return el('tr', null, [el('th', { 'class': 'time', text: time })].concat(CABINS.map(function (c) {
+        var cell = grid[time + '|' + c[0]];
+        if (!cell) return el('td', { 'class': 'none', text: 'no offer' });
+        return el('td', { 'class': 'offer' }, cell.map(function (offer) {
+          var currency = offer.change_total_currency;
+          return el('div', null, [
+            el('div', { 'class': 'cost num', text: '+' + money(offer.change_total_amount, currency) }),
+            el('div', { 'class': 'detail num', text: 'penalty ' + money(offer.penalty_total_amount, offer.penalty_total_currency || currency) }),
+            el('div', { 'class': 'detail num', text: 'new total ' + money(offer.new_total_amount, offer.new_total_currency || currency) }),
+            el('div', { 'class': 'detail code', text: offer.id || '' }),
+          ]);
+        }));
+      })));
+    });
+    root.appendChild(el('div', { 'class': 'scroll' }, [el('table', null, [el('thead', null, [head]), el('tbody', null, rows)])]));
+  }
+
+  window.addEventListener('message', function (event) {
+    var msg = event.data;
+    if (!msg || msg.type !== 'aat-visualizer-data') return;
+    Object.keys(msg.theme || {}).forEach(function (name) {
+      document.documentElement.style.setProperty(name, msg.theme[name]);
+    });
+    render(msg.body);
+    requestAnimationFrame(function () {
+      parent.postMessage({ type: 'aat-visualizer-resize', height: document.documentElement.scrollHeight }, '*');
+    });
+  });
+
+  parent.postMessage({ type: 'aat-visualizer-ready' }, '*');
+})();
+</script>
+</body>
+</html>

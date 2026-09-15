@@ -1,0 +1,36 @@
+adapter: createOrderChange
+protocol: http
+
+request:
+  method: POST
+  path: /air/order_changes
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"selected_order_change_offer": "{{orderChangeOfferId}}"}}
+
+response:
+  extract:
+    orderChangeId: data.id
+    changeTotalAmount: data.change_total_amount
+    changeTotalCurrency: data.change_total_currency
+    penaltyTotalAmount:
+      path: data.penalty_total_amount
+      default: ""
+    newTotalAmount:
+      path: data.new_total_amount
+      default: ""
+    confirmedAt:
+      path: data.confirmed_at
+      default: ""
+  # A change that costs something is paid when it's confirmed; one that costs nothing sends no payment, so
+  # paymentAmount is left out.
+  transform: |
+    local change = json_path("data") or {}
+    local total = tonumber(change.change_total_amount or "0") or 0
+    if total > 0 then outputs.paymentAmount = change.change_total_amount end
+    local added = ((change.slices or {}).add or {})[1] or {}
+    local segment = (added.segments or {})[1] or {}
+    outputs.addedCabinClass = ((segment.passengers or {})[1] or {}).cabin_class or ""
+    outputs.addedDepartureTime = string.sub(segment.departing_at or "", 12, 16)
+    return outputs

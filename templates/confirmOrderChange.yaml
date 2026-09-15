@@ -1,0 +1,21 @@
+adapter: confirmOrderChange
+protocol: http
+
+request:
+  method: POST
+  path: /air/order_changes/{{orderChangeId}}/actions/confirm
+  headers:
+    Content-Type: application/json
+  # The payment goes only with a change that costs something.
+  body: |
+    {"data": { {{?paymentAmount}}"payment": {"type": "balance", "amount": "{{paymentAmount}}", "currency": "{{currency}}"}{{/paymentAmount}} } }
+
+response:
+  extract:
+    orderChangeId: data.id
+    changeTotalAmount:
+      path: data.change_total_amount
+      default: ""
+    confirmedAt:
+      path: data.confirmed_at
+      default: ""

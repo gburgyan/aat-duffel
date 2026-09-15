@@ -1,0 +1,13 @@
+adapter: acceptAirlineInitiatedChange
+protocol: http
+
+request:
+  method: POST
+  path: /air/airline_initiated_changes/{{airlineInitiatedChangeId}}/actions/accept
+
+response:
+  extract:
+    airlineInitiatedChangeId: data.id
+    actionTaken:
+      path: data.action_taken
+      default: ""

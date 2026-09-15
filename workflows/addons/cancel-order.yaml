@@ -1,0 +1,108 @@
+execution:
+  steps:
+    - id: current
+      node: getOrder
+      description: The order as it stands before the cancellation
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'cancellable == true && cancelledAt == ""'
+
+    - id: quote
+      node: createOrderCancellation
+      dependsOn: [current]
+      description: Quote the cancellation, with its refund and where the refund goes
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'refundAmount != "" && refundTo != "" && expiresAt != ""'
+
+    - id: readQuote
+      node: getOrderCancellation
+      dependsOn: [quote]
+      description: The quote read back, not yet confirmed
+      values:
+        orderCancellationId: {from: quote.orderCancellationId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'confirmedAt == "" && refundAmount == "{{quote.refundAmount}}" && refundTo == "{{quote.refundTo}}"'
+
+    - id: cancellations
+      node: listOrderCancellations
+      dependsOn: [readQuote]
+      description: The order's one cancellation, unconfirmed
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: cancellationCount == 1 && confirmedCancellationCount == 0
+
+    - id: confirm
+      node: confirmOrderCancellation
+      dependsOn: [cancellations]
+      description: Confirm the quote, which cancels the order and refunds it
+      values:
+        orderCancellationId: {from: quote.orderCancellationId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'confirmedAt != "" && refundAmount == "{{quote.refundAmount}}"'
+
+    - id: cancelled
+      node: getOrder
+      dependsOn: [confirm]
+      description: The order read again, cancelled with the quoted refund, and only its metadata left to update
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              cancelledAt != "" && cancellable == false && availableActions == "update" &&
+              refundAmount == "{{quote.refundAmount}}" && refundTo == "{{quote.refundTo}}"
+
+    - id: quoteAgain
+      node: createOrderCancellation
+      dependsOn: [cancelled]
+      description: A second quote for the cancelled order, refused
+      values:
+        orderId: {from: book.orderId}
+      expectFailure:
+        status: [422]
+        description: The order is already cancelled
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: already_cancelled
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_state_error
+            raw: true
+
+    - id: confirmAgain
+      node: confirmOrderCancellation
+      dependsOn: [quoteAgain]
+      description: The confirmed quote confirmed a second time, refused
+      values:
+        orderCancellationId: {from: quote.orderCancellationId}
+      expectFailure:
+        status: [422]
+        description: The order is already cancelled
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: already_cancelled
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_state_error
+            raw: true

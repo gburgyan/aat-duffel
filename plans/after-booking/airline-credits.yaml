@@ -1,0 +1,126 @@
+# An airline credit created for the account, read back unspent, and found in the account's list. A held
+# order then tries to spend it: POST /air/payments accepts only balance and card, so Duffel refuses the
+# credit with 422 validation_inclusion. Each run leaves one credit on the account, since credits can't be
+# deleted; cleanup cancels the hold.
+metadata:
+  prompt: Create an airline credit, read it, and try to pay a held order with it
+  graphVersion: "1.0.0"
+intent:
+  goal: payWithCredit
+  description: An airline credit created and read, and a payment with it refused
+
+execution:
+  steps:
+    - id: create
+      node: createAirlineCredit
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'amount == "25.00" && code != ""'
+
+    - id: credit
+      node: getAirlineCredit
+      dependsOn: [create]
+      values:
+        airlineCreditId: {from: create.airlineCreditId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              amount == "{{create.amount}}" && code == "{{create.code}}" && amountCurrency == "USD" &&
+              spentAt == "" && invalidatedAt == "" && orderId == ""
+
+    - id: credits
+      node: listAirlineCredits
+      dependsOn: [credit]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: airlineCreditCount >= 1
+
+    - id: search
+      node: createOfferRequest
+      dependsOn: [credits]
+      values:
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+        maxConnections: 0
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+
+    - id: book
+      node: createOrder
+      dependsOn: [offer]
+      values:
+        orderType: hold
+        offerId: {from: offer.offerId}
+        bookingPassengers: {from: offer.bookingPassengers}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'awaitingPayment == true && metadataSource == "aat-duffel"'
+
+    - id: payWithCredit
+      node: createPayment
+      dependsOn: [book]
+      isGoal: true
+      values:
+        orderId: {from: book.orderId}
+        amount: {from: book.totalAmount}
+        currency: {from: book.totalCurrency}
+        paymentType: airline_credit
+        airlineCreditId: {from: create.airlineCreditId}
+      expectFailure:
+        status: [422]
+        description: A payment's type must be balance or card
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: validation_inclusion
+            raw: true
+          - type: fieldEquals
+            path: errors.0.source.field
+            value: type
+            raw: true
+
+  verification:
+    - node: getOrder
+      purpose: The hold is still unpaid
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'awaitingPayment == true && paidAt == ""'
+    - node: getAirlineCredit
+      purpose: The credit is still unspent
+      values:
+        airlineCreditId: {from: create.airlineCreditId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'spentAt == ""'

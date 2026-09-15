@@ -7,7 +7,7 @@ request:
   headers:
     Content-Type: application/json
   body: |
-    {"data": {"order_id": "{{orderId}}", "payment": {"type": "balance", "amount": "{{amount}}", "currency": "{{currency}}"}}}
+    {"data": {"order_id": "{{orderId}}", "payment": {"type": "{{paymentType}}", "amount": "{{amount}}", "currency": "{{currency}}"{{?airlineCreditId}}, "airline_credit_id": "{{airlineCreditId}}"{{/airlineCreditId}}}}}
 
 response:
   extract:

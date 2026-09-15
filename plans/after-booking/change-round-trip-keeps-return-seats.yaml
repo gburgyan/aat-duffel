@@ -1,0 +1,23 @@
+# Two adults on a round trip with seats on both flights; the outbound moves to premium economy at 18:00.
+# The seats on the outbound go with it, and the two seats on the return stay. Cleanup cancels the order.
+kind: recipe
+metadata:
+  prompt: Book a round trip for two with seats, then change the outbound flight
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: Two adults on a round trip with seats, the outbound changed
+  choices:
+    payment: Pay Now
+  addons: [Seats, Change Flight]
+  layers: [party-couple]
+overrides:
+  values:
+    search.returnDate: "{{today + 44 days}}"
+  assertions:
+    book:
+      - type: predicate
+        expr: 'sliceCount == 2 && seatsPerSlice == "2,2"'
+    inc1_afterChange:
+      - type: predicate
+        expr: 'sliceCount == 2 && seatsPerSlice == "0,2"'

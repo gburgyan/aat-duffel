@@ -23,3 +23,15 @@ visualizers:
     file: order.html
     match:
       bodyPath: data.booking_reference
+
+  - id: change-offers
+    name: Change offers
+    file: change-offers.html
+    match:
+      bodyPath: data.order_change_offers
+
+  - id: change-offer-list
+    name: Change offers
+    file: change-offers.html
+    match:
+      node: listOrderChangeOffers

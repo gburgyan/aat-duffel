@@ -1240,6 +1240,35 @@ nodes:
         type: string
       - name: userCount
         type: integer
+      - name: firstSliceCabin
+        type: string
+      - name: firstSliceDepartureDate
+        type: string
+      - name: firstSliceDepartureTime
+        type: string
+        description: The first slice's departure time, HH:MM local to its airport
+      - name: changeCount
+        type: integer
+      - name: confirmedChangeCount
+        type: integer
+      - name: lastChangeTotalAmount
+        type: string
+      - name: refundAmount
+        type: string
+      - name: refundTo
+        type: string
+      - name: airlineInitiatedChangeCount
+        type: integer
+      - name: firstSliceOrigin
+        type: string
+      - name: firstSliceDestination
+        type: string
+      - name: seatsPerSlice
+        type: string
+      - name: bagsPerSlice
+        type: string
+      - name: totalBeforeChanges
+        type: string
     cleanup:
       node: createOrderCancellation
       when: cancellable == true
@@ -1326,6 +1355,40 @@ nodes:
         type: string
       - name: userCount
         type: integer
+      - name: firstSliceCabin
+        type: string
+      - name: firstSliceDepartureDate
+        type: string
+      - name: firstSliceDepartureTime
+        type: string
+        description: The first slice's departure time, HH:MM local to its airport
+      - name: changeCount
+        type: integer
+      - name: confirmedChangeCount
+        type: integer
+      - name: lastChangeTotalAmount
+        type: string
+        description: What the latest confirmed change cost; "" before any
+      - name: refundAmount
+        type: string
+        description: The refund of a confirmed cancellation; "" when the order isn't cancelled
+      - name: refundTo
+        type: string
+      - name: airlineInitiatedChangeCount
+        type: integer
+      - name: firstSliceOrigin
+        type: string
+      - name: firstSliceDestination
+        type: string
+      - name: seatsPerSlice
+        type: string
+        description: Seat services on each slice, in slice order, such as "2,2"
+      - name: bagsPerSlice
+        type: string
+        description: Extra bag services on each slice, in slice order, such as "1,0"
+      - name: totalBeforeChanges
+        type: string
+        description: The total less every confirmed change's change_total_amount
 
   updateOrder:
     description: >-
@@ -1398,8 +1461,8 @@ nodes:
 
   createPayment:
     description: >-
-      Pay a held order from the balance (POST /air/payments, 201), with amount and currency exactly the
-      order's total.
+      Pay a held order (POST /air/payments, 201), from the balance or with an airline credit, with amount
+      and currency exactly the order's total.
     adapter: createPayment
     tags: [orders, payments]
     inputs:
@@ -1411,6 +1474,13 @@ nodes:
         type: string
       - name: currency
         type: string
+      - name: paymentType
+        type: enum[balance, airline_credit]
+        default: balance
+      - name: airlineCreditId
+        type: string
+        optional: true
+        description: The credit a payment of type airline_credit spends
     outputs:
       - name: paymentId
         type: string
@@ -1469,6 +1539,447 @@ nodes:
       - name: paymentType
         type: string
       - name: paymentStatus
+        type: string
+
+  # --- Changes, cancellations, and services after booking ---------------------------------
+
+  createOrderChangeRequest:
+    description: >-
+      Ask what it costs to replace an order's slice with another (POST /air/order_change_requests, 201).
+      The request removes one slice and adds a journey on a new date in a requested cabin, and answers
+      with change offers, each with its added flight, what it costs, and the order's new total.
+    adapter: createOrderChangeRequest
+    tags: [orders, changes]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+      - name: sliceId
+        type: string
+        default:
+          from: createOrder.firstSliceId
+      - name: origin
+        type: string
+      - name: destination
+        type: string
+      - name: departureDate
+        type: date
+        default: "{{today + 37 days}}"
+      - name: cabinClass
+        type: enum[economy, premium_economy, business, first]
+        default: economy
+    outputs:
+      - name: orderChangeRequestId
+        type: string
+      - name: changeOfferCount
+        type: integer
+        display: Change offers
+      - name: changeOffers
+        type: changeOffer[]
+        elementFields:
+          - name: id
+            type: string
+          - name: cabinClass
+            type: string
+          - name: departureTime
+            type: string
+          - name: departureDate
+            type: string
+          - name: changeTotalAmount
+            type: string
+          - name: penaltyTotalAmount
+            type: string
+          - name: newTotalAmount
+            type: string
+      - name: cabins
+        type: string
+        description: The distinct cabins offered, sorted and joined by commas
+      - name: departureTimes
+        type: string
+        description: The distinct departure times offered, sorted and joined by commas
+      - name: changeTotals
+        type: string
+        description: The distinct change totals, sorted and joined by commas
+      - name: businessOfferCount
+        type: integer
+
+  getOrderChangeRequest:
+    description: Read an order change request with its change offers (GET /air/order_change_requests/{id}, 200).
+    adapter: getOrderChangeRequest
+    tags: [orders, changes]
+    inputs:
+      - name: orderChangeRequestId
+        type: string
+        default:
+          from: createOrderChangeRequest.orderChangeRequestId
+    outputs:
+      - name: orderChangeRequestId
+        type: string
+      - name: changeOfferCount
+        type: integer
+      - name: changeOffers
+        type: changeOffer[]
+        elementFields:
+          - name: id
+            type: string
+          - name: cabinClass
+            type: string
+          - name: departureTime
+            type: string
+          - name: departureDate
+            type: string
+          - name: changeTotalAmount
+            type: string
+          - name: penaltyTotalAmount
+            type: string
+          - name: newTotalAmount
+            type: string
+      - name: cabins
+        type: string
+      - name: departureTimes
+        type: string
+      - name: changeTotals
+        type: string
+      - name: businessOfferCount
+        type: integer
+
+  listOrderChangeOffers:
+    description: >-
+      Page through a change request's offers, cheapest change first (GET
+      /air/order_change_offers?order_change_request_id=, 200), with cursor pagination.
+    adapter: listOrderChangeOffers
+    tags: [orders, changes, pagination]
+    inputs:
+      - name: orderChangeRequestId
+        type: string
+        default:
+          from: createOrderChangeRequest.orderChangeRequestId
+      - name: after
+        type: string
+        optional: true
+    outputs:
+      - name: changeOfferCount
+        type: integer
+      - name: changeOffers
+        type: changeOffer[]
+        elementFields:
+          - name: id
+            type: string
+          - name: cabinClass
+            type: string
+          - name: departureTime
+            type: string
+          - name: departureDate
+            type: string
+          - name: changeTotalAmount
+            type: string
+          - name: penaltyTotalAmount
+            type: string
+          - name: newTotalAmount
+            type: string
+      - name: cabins
+        type: string
+      - name: departureTimes
+        type: string
+      - name: changeTotals
+        type: string
+      - name: businessOfferCount
+        type: integer
+      - name: nextCursor
+        type: string
+
+  getOrderChangeOffer:
+    description: Read one change offer (GET /air/order_change_offers/{id}, 200) with the flight it adds and its cost.
+    adapter: getOrderChangeOffer
+    tags: [orders, changes]
+    inputs:
+      - name: orderChangeOfferId
+        type: string
+    outputs:
+      - name: orderChangeOfferId
+        type: string
+      - name: changeTotalAmount
+        type: string
+      - name: changeTotalCurrency
+        type: string
+      - name: penaltyTotalAmount
+        type: string
+      - name: newTotalAmount
+        type: string
+      - name: cabinClass
+        type: string
+      - name: departureTime
+        type: string
+      - name: departureDate
+        type: string
+
+  createOrderChange:
+    description: >-
+      Choose a change offer (POST /air/order_changes, 201), which makes a pending change with its cost.
+      Nothing changes on the order until confirmOrderChange.
+    adapter: createOrderChange
+    tags: [orders, changes]
+    inputs:
+      - name: orderChangeOfferId
+        type: string
+        default:
+          from: getOrderChangeOffer.orderChangeOfferId
+    outputs:
+      - name: orderChangeId
+        type: string
+      - name: changeTotalAmount
+        type: string
+        display: Change cost
+      - name: changeTotalCurrency
+        type: string
+      - name: penaltyTotalAmount
+        type: string
+      - name: newTotalAmount
+        type: string
+      - name: confirmedAt
+        type: string
+      - name: paymentAmount
+        type: string
+        optional: true
+        description: The payment the confirmation sends; absent when the change costs nothing
+      - name: addedCabinClass
+        type: string
+      - name: addedDepartureTime
+        type: string
+
+  getOrderChange:
+    description: Read an order change (GET /air/order_changes/{id}, 200), pending or confirmed.
+    adapter: getOrderChange
+    tags: [orders, changes]
+    inputs:
+      - name: orderChangeId
+        type: string
+        default:
+          from: createOrderChange.orderChangeId
+    outputs:
+      - name: orderChangeId
+        type: string
+      - name: changeTotalAmount
+        type: string
+      - name: confirmedAt
+        type: string
+
+  confirmOrderChange:
+    description: >-
+      Confirm a pending change (POST /air/order_changes/{id}/actions/confirm, 200), paying its cost from
+      the balance when it has one.
+    adapter: confirmOrderChange
+    tags: [orders, changes]
+    inputs:
+      - name: orderChangeId
+        type: string
+        default:
+          from: createOrderChange.orderChangeId
+      - name: paymentAmount
+        type: string
+        optional: true
+      - name: currency
+        type: string
+        optional: true
+    outputs:
+      - name: orderChangeId
+        type: string
+      - name: changeTotalAmount
+        type: string
+      - name: confirmedAt
+        type: string
+
+  getOrderCancellation:
+    description: Read a cancellation, quoted or confirmed (GET /air/order_cancellations/{id}, 200).
+    adapter: getOrderCancellation
+    tags: [orders, cancellations]
+    inputs:
+      - name: orderCancellationId
+        type: string
+        default:
+          from: createOrderCancellation.orderCancellationId
+    outputs:
+      - name: orderCancellationId
+        type: string
+      - name: refundAmount
+        type: string
+      - name: refundTo
+        type: string
+      - name: expiresAt
+        type: string
+      - name: confirmedAt
+        type: string
+
+  listOrderCancellations:
+    description: List an order's cancellations (GET /air/order_cancellations?order_id=, 200).
+    adapter: listOrderCancellations
+    tags: [orders, cancellations]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+    outputs:
+      - name: cancellationCount
+        type: integer
+      - name: confirmedCancellationCount
+        type: integer
+
+  listOrderAvailableServices:
+    description: List the services a booked order can still add (GET /air/orders/{id}/available_services, 200).
+    adapter: listOrderAvailableServices
+    tags: [orders, services]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+    outputs:
+      - name: serviceCount
+        type: integer
+
+  addOrderServices:
+    description: >-
+      Add a service to a booked order (POST /air/orders/{id}/services), paying for it from the balance
+      when an amount is given; a held order takes no payment.
+    adapter: addOrderServices
+    tags: [orders, services]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+      - name: serviceId
+        type: string
+      - name: amount
+        type: string
+        optional: true
+      - name: currency
+        type: string
+        optional: true
+    outputs:
+      - name: serviceCount
+        type: integer
+        optional: true
+
+  # --- Disruptions: airline-initiated changes and airline credits ---------------------------
+
+  listAirlineInitiatedChanges:
+    description: List an order's airline-initiated changes (GET /air/airline_initiated_changes?order_id=, 200).
+    adapter: listAirlineInitiatedChanges
+    tags: [orders, disruptions]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+    outputs:
+      - name: airlineInitiatedChangeCount
+        type: integer
+        display: Airline changes
+      - name: latestAirlineInitiatedChangeId
+        type: string
+        description: The newest change, the only one that can be accepted; "" when there is none
+      - name: latestActionTaken
+        type: string
+      - name: latestAvailableActions
+        type: string
+        description: The newest change's available actions, sorted and joined by commas
+
+  acceptAirlineInitiatedChange:
+    description: >-
+      Accept an airline-initiated change (POST /air/airline_initiated_changes/{id}/actions/accept). Only
+      the order's latest change can be accepted; an older one gets 422 stale_airline_initiated_change_accept.
+    adapter: acceptAirlineInitiatedChange
+    tags: [orders, disruptions]
+    inputs:
+      - name: airlineInitiatedChangeId
+        type: string
+        default:
+          from: listAirlineInitiatedChanges.latestAirlineInitiatedChangeId
+    outputs:
+      - name: airlineInitiatedChangeId
+        type: string
+      - name: actionTaken
+        type: string
+
+  listAirlineCredits:
+    description: List the account's airline credits (GET /air/airline_credits, 200), optionally a customer user's.
+    adapter: listAirlineCredits
+    tags: [disruptions, credits]
+    inputs:
+      - name: userId
+        type: string
+        optional: true
+    outputs:
+      - name: airlineCreditCount
+        type: integer
+      - name: firstAirlineCreditId
+        type: string
+
+  getAirlineCredit:
+    description: Read an airline credit (GET /air/airline_credits/{id}, 200).
+    adapter: getAirlineCredit
+    tags: [disruptions, credits]
+    inputs:
+      - name: airlineCreditId
+        type: string
+    outputs:
+      - name: airlineCreditId
+        type: string
+      - name: amount
+        type: string
+      - name: amountCurrency
+        type: string
+      - name: code
+        type: string
+      - name: spentAt
+        type: string
+      - name: invalidatedAt
+        type: string
+      - name: orderId
+        type: string
+
+  createAirlineCredit:
+    description: Record an airline credit the account holds (POST /air/airline_credits).
+    adapter: createAirlineCredit
+    tags: [disruptions, credits]
+    inputs:
+      - name: airlineCode
+        type: string
+        default: ZZ
+      - name: amount
+        type: string
+        default: "25.00"
+      - name: currency
+        type: string
+        default: USD
+      - name: code
+        type: string
+        default: "{{unixtime}}000"
+        description: A 13-digit ticket number; Duffel refuses letters with 422 validation_format
+      - name: issuedOn
+        type: date
+        default: "{{today}}"
+      - name: expiresAt
+        type: string
+        default: "{{now + 365 days}}"
+      - name: creditType
+        type: enum[eticket, mco, emd]
+        default: mco
+      - name: givenName
+        type: string
+        default: Amelia
+      - name: familyName
+        type: string
+        default: Earhart
+    outputs:
+      - name: airlineCreditId
+        type: string
+      - name: amount
+        type: string
+      - name: code
         type: string
 
 workflows:
@@ -1542,3 +2053,26 @@ workflows:
     description: Replace the order's metadata, then find the order by its booking reference
     after: [createPayment, createOrder]
     template: workflows/addons/update-metadata.yaml
+
+  - name: Change Flight
+    kind: addon
+    description: >-
+      Move the first flight a week later in premium economy at 18:00, confirm it, and check the order's
+      cabin, time, and total; a second change is refused
+    after: [createPayment, createOrder]
+    template: workflows/addons/change-flight.yaml
+
+  - name: Airline-Initiated Change
+    kind: addon
+    description: Read the change Duffel Airways makes on the LHR to LTN test route, accept it, and check the flight's new time
+    after: [createPayment, createOrder]
+    template: workflows/addons/airline-initiated-change.yaml
+
+  - name: Cancel Order
+    kind: addon
+    description: >-
+      Quote the cancellation, confirm it, and check the refund on the cancelled order; a second quote and
+      a second confirmation are refused
+    after: [createPayment, createOrder]
+    priority: 10
+    template: workflows/addons/cancel-order.yaml

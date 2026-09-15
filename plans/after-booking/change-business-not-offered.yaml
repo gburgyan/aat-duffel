@@ -1,0 +1,112 @@
+# A change to business asked for on an economy order: Duffel Airways offers the change in economy,
+# premium economy, and first, never business. The plan asserts no business offer exists in the request,
+# when it's read back, or in the list, so nothing can quietly change the order to another cabin. The
+# order is left unchanged, and cleanup cancels it.
+metadata:
+  prompt: Ask to change a booked flight to business class
+  graphVersion: "1.0.0"
+intent:
+  goal: changeOffers
+  description: A change request for business offers no business cabin
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+        maxConnections: 0
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+
+    - id: price
+      node: priceOffer
+      dependsOn: [offer]
+      values:
+        offerId: {from: offer.offerId}
+
+    - id: book
+      node: createOrder
+      dependsOn: [price]
+      values:
+        orderType: instant
+        offerId: {from: offer.offerId}
+        bookingPassengers: {from: offer.bookingPassengers}
+        amount: {from: price.totalAmount}
+        currency: {from: price.totalCurrency}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'awaitingPayment == false && firstSliceCabin == "economy" && metadataSource == "aat-duffel"'
+
+    - id: changeRequest
+      node: createOrderChangeRequest
+      dependsOn: [book]
+      values:
+        orderId: {from: book.orderId}
+        sliceId: {from: book.firstSliceId}
+        origin: {from: book.firstSliceOrigin}
+        destination: {from: book.firstSliceDestination}
+        departureDate: "{{today + 37 days}}"
+        cabinClass: business
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'changeOfferCount == 9 && businessOfferCount == 0 && cabins == "economy,first,premium_economy"'
+
+    - id: readRequest
+      node: getOrderChangeRequest
+      dependsOn: [changeRequest]
+      values:
+        orderChangeRequestId: {from: changeRequest.orderChangeRequestId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'changeOfferCount == "{{changeRequest.changeOfferCount}}" && businessOfferCount == 0'
+
+    - id: changeOffers
+      node: listOrderChangeOffers
+      dependsOn: [readRequest]
+      isGoal: true
+      values:
+        orderChangeRequestId: {from: changeRequest.orderChangeRequestId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'changeOfferCount == "{{changeRequest.changeOfferCount}}" && businessOfferCount == 0 && nextCursor == ""'
+
+  verification:
+    - node: getOrder
+      purpose: The order is unchanged, still in economy on its first date
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              changeCount == 0 && firstSliceCabin == "economy" &&
+              firstSliceDepartureDate == "{{book.firstSliceDepartureDate}}" && totalAmount == "{{book.totalAmount}}"

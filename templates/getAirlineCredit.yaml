@@ -1,0 +1,26 @@
+adapter: getAirlineCredit
+protocol: http
+
+request:
+  method: GET
+  path: /air/airline_credits/{{airlineCreditId}}
+
+response:
+  extract:
+    airlineCreditId: data.id
+    amount: data.amount
+    amountCurrency:
+      path: data.amount_currency
+      default: ""
+    code:
+      path: data.code
+      default: ""
+    spentAt:
+      path: data.spent_at
+      default: ""
+    invalidatedAt:
+      path: data.invalidated_at
+      default: ""
+    orderId:
+      path: data.order_id
+      default: ""

@@ -1,0 +1,17 @@
+adapter: listOrderCancellations
+protocol: http
+
+request:
+  method: GET
+  path: /air/order_cancellations?order_id={{orderId}}
+
+response:
+  extract:
+    cancellationCount: 'data.#'
+  transform: |
+    local confirmed = 0
+    for _, cancellation in ipairs(json_path("data") or {}) do
+      if cancellation.confirmed_at then confirmed = confirmed + 1 end
+    end
+    outputs.confirmedCancellationCount = confirmed
+    return outputs

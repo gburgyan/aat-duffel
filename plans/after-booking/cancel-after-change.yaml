@@ -1,0 +1,21 @@
+# One adult booked, changed to premium economy at 18:00, then cancelled: the refund is the total after
+# the change, so the change's 125.00 comes back too. The plan's own steps release both cleanup entries.
+kind: recipe
+metadata:
+  prompt: Book a flight, change it, then cancel it and check the refund
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: One adult, changed, then cancelled
+  choices:
+    payment: Pay Now
+  addons: [Change Flight, Cancel Order]
+  layers: [party-solo]
+overrides:
+  assertions:
+    inc1_quote:
+      - type: predicate
+        expr: 'refundAmount == "{{inc0_afterChange.totalAmount}}" && refundTo == "balance"'
+    inc1_cancelled:
+      - type: predicate
+        expr: 'confirmedChangeCount == 1 && totalBeforeChanges == "{{book.totalAmount}}"'

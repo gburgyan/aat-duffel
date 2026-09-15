@@ -1,0 +1,94 @@
+# A cancellation quoted and left unconfirmed. The quote takes over from the order's cleanup entry (it
+# names the same order), and the quote's own cleanup confirms it after the run, so the order still ends
+# cancelled: `aat run show` lists confirmOrderCancellation under cleanup and nothing else.
+metadata:
+  prompt: Book a flight and quote its cancellation without confirming it
+  graphVersion: "1.0.0"
+intent:
+  goal: readQuote
+  description: A cancellation quote left for cleanup to confirm
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+        maxConnections: 0
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+
+    - id: price
+      node: priceOffer
+      dependsOn: [offer]
+      values:
+        offerId: {from: offer.offerId}
+
+    - id: book
+      node: createOrder
+      dependsOn: [price]
+      values:
+        orderType: instant
+        offerId: {from: offer.offerId}
+        bookingPassengers: {from: offer.bookingPassengers}
+        amount: {from: price.totalAmount}
+        currency: {from: price.totalCurrency}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'awaitingPayment == false && metadataSource == "aat-duffel"'
+
+    - id: quote
+      node: createOrderCancellation
+      dependsOn: [book]
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'refundAmount == "{{book.totalAmount}}" && refundTo == "balance" && expiresAt != ""'
+
+    - id: readQuote
+      node: getOrderCancellation
+      dependsOn: [quote]
+      isGoal: true
+      values:
+        orderCancellationId: {from: quote.orderCancellationId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'confirmedAt == "" && refundAmount == "{{quote.refundAmount}}"'
+
+  verification:
+    - node: getOrder
+      purpose: The order is still booked when the steps end; cleanup confirms the quote afterwards
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'cancelledAt == "" && cancellable == true'

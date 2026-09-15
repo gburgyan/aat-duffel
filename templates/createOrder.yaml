@@ -107,10 +107,17 @@ response:
         origin = (slice.origin or {}).iata_code or "",
         destination = (slice.destination or {}).iata_code or "",
         departureDate = string.sub(segment.departing_at or "", 1, 10),
+        departureTime = string.sub(segment.departing_at or "", 12, 16),
         cabinClass = ((segment.passengers or {})[1] or {}).cabin_class or "",
       })
     end
     outputs.slices = slices
+    local firstSlice = slices[1] or {}
+    outputs.firstSliceCabin = firstSlice.cabinClass or ""
+    outputs.firstSliceDepartureDate = firstSlice.departureDate or ""
+    outputs.firstSliceDepartureTime = firstSlice.departureTime or ""
+    outputs.firstSliceOrigin = firstSlice.origin or ""
+    outputs.firstSliceDestination = firstSlice.destination or ""
 
     local seats, bags = 0, 0
     for _, service in ipairs(order.services or {}) do
@@ -119,7 +126,56 @@ response:
     end
     outputs.seatCount, outputs.bagCount = seats, bags
 
+    -- Seat and bag services on each slice, in slice order, such as "2,2". A change drops the services on
+    -- the slice it replaces.
+    local sliceOfSegment, seatsBySlice, bagsBySlice = {}, {}, {}
+    for index, slice in ipairs(orderSlices) do
+      seatsBySlice[index], bagsBySlice[index] = 0, 0
+      for _, segment in ipairs(slice.segments or {}) do sliceOfSegment[segment.id] = index end
+    end
+    for _, service in ipairs(order.services or {}) do
+      local counted = {}
+      for _, segmentId in ipairs(service.segment_ids or {}) do
+        local index = sliceOfSegment[segmentId]
+        if index and not counted[index] then
+          counted[index] = true
+          if service.type == "seat" then seatsBySlice[index] = seatsBySlice[index] + 1 end
+          if service.type == "baggage" then bagsBySlice[index] = bagsBySlice[index] + 1 end
+        end
+      end
+    end
+    -- Strings before joining, so one slice gives "1" and not the number 1.
+    for index = 1, #orderSlices do
+      seatsBySlice[index], bagsBySlice[index] = tostring(seatsBySlice[index]), tostring(bagsBySlice[index])
+    end
+    outputs.seatsPerSlice = table.concat(seatsBySlice, ",")
+    outputs.bagsPerSlice = table.concat(bagsBySlice, ",")
+
     local metadata = type(order.metadata) == "table" and order.metadata or {}
     outputs.metadataSource = text(metadata.source)
     outputs.metadataReference = text(metadata.reference)
+
+    -- A confirmed change adds its whole change_total_amount to the order's total, so the total before any
+    -- change is the total less every confirmed change.
+    local changes = order.changes or {}
+    local confirmed, lastChange, changedCents = 0, nil, 0
+    for _, change in ipairs(changes) do
+      if change.confirmed_at then
+        confirmed = confirmed + 1
+        changedCents = changedCents + cents(change.change_total_amount)
+        if not lastChange or change.confirmed_at > lastChange.confirmed_at then lastChange = change end
+      end
+    end
+    outputs.changeCount = #changes
+    outputs.confirmedChangeCount = confirmed
+    outputs.lastChangeTotalAmount = lastChange and text(lastChange.change_total_amount) or ""
+    local before = cents(order.total_amount) - changedCents
+    local fraction = before % 100
+    outputs.totalBeforeChanges = tostring((before - fraction) / 100) .. "." .. (fraction < 10 and "0" or "") ..
+      tostring(fraction)
+
+    local cancellation = type(order.cancellation) == "table" and order.cancellation or {}
+    outputs.refundAmount = text(cancellation.refund_amount)
+    outputs.refundTo = text(cancellation.refund_to)
+    outputs.airlineInitiatedChangeCount = #(order.airline_initiated_changes or {})
     return outputs

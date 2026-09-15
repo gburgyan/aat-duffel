@@ -1,0 +1,12 @@
+adapter: listOrderAvailableServices
+protocol: http
+
+request:
+  method: GET
+  path: /air/orders/{{orderId}}/available_services
+
+response:
+  extract:
+    serviceCount:
+      path: 'data.#'
+      default: 0

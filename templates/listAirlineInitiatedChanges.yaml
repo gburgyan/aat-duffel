@@ -1,0 +1,24 @@
+adapter: listAirlineInitiatedChanges
+protocol: http
+
+request:
+  method: GET
+  path: /air/airline_initiated_changes?order_id={{orderId}}
+
+response:
+  extract:
+    airlineInitiatedChangeCount: 'data.#'
+  # Only the latest change can be accepted, so the outputs describe that one.
+  transform: |
+    local latest = nil
+    for _, change in ipairs(json_path("data") or {}) do
+      if not latest or (change.created_at or "") > (latest.created_at or "") then latest = change end
+    end
+    latest = latest or {}
+    local actions = {}
+    for _, action in ipairs(latest.available_actions or {}) do table.insert(actions, action) end
+    table.sort(actions)
+    outputs.latestAirlineInitiatedChangeId = latest.id or ""
+    outputs.latestActionTaken = latest.action_taken or ""
+    outputs.latestAvailableActions = table.concat(actions, ",")
+    return outputs

@@ -1,0 +1,17 @@
+adapter: addOrderServices
+protocol: http
+
+request:
+  method: POST
+  path: /air/orders/{{orderId}}/services
+  headers:
+    Content-Type: application/json
+  # A held order takes its services without a payment.
+  body: |
+    {"data": {"add_services": [{"id": "{{serviceId}}", "quantity": 1}]{{?amount}}, "payment": {"type": "balance", "amount": "{{amount}}", "currency": "{{currency}}"}{{/amount}}}}
+
+response:
+  extract:
+    serviceCount:
+      path: 'data.services.#'
+      default: 0

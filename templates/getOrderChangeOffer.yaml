@@ -1,0 +1,25 @@
+adapter: getOrderChangeOffer
+protocol: http
+
+request:
+  method: GET
+  path: /air/order_change_offers/{{orderChangeOfferId}}
+
+response:
+  extract:
+    orderChangeOfferId: data.id
+    changeTotalAmount: data.change_total_amount
+    changeTotalCurrency: data.change_total_currency
+    penaltyTotalAmount:
+      path: data.penalty_total_amount
+      default: ""
+    newTotalAmount:
+      path: data.new_total_amount
+      default: ""
+  transform: |
+    local added = ((json_path("data.slices") or {}).add or {})[1] or {}
+    local segment = (added.segments or {})[1] or {}
+    outputs.cabinClass = ((segment.passengers or {})[1] or {}).cabin_class or ""
+    outputs.departureTime = string.sub(segment.departing_at or "", 12, 16)
+    outputs.departureDate = string.sub(segment.departing_at or "", 1, 10)
+    return outputs

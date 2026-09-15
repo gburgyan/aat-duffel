@@ -1,0 +1,141 @@
+# A checked bag added to a held order, twice. With a payment, Duffel refuses it with 422
+# pay_later_order_no_payment_for_ancillaries, since a held order pays for its services later. Without one,
+# Duffel Airways refuses it with 400 "Unsupported operation", as it does for a paid order. The hold is
+# left as it was, and cleanup cancels it.
+metadata:
+  prompt: Hold a flight, then try to add a checked bag, with and without a payment
+  graphVersion: "1.0.0"
+intent:
+  goal: addBag
+  description: A bag added to a held order is refused, with a payment and without one
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+        maxConnections: 0
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+
+    - id: bags
+      node: getOfferBags
+      dependsOn: [offer]
+      values:
+        offerId: {from: offer.offerId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: bagServiceCount >= 1
+
+    - id: book
+      node: createOrder
+      dependsOn: [bags]
+      values:
+        orderType: hold
+        offerId: {from: offer.offerId}
+        bookingPassengers: {from: offer.bookingPassengers}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'awaitingPayment == true && bagCount == 0 && metadataSource == "aat-duffel"'
+
+    - id: available
+      node: listOrderAvailableServices
+      dependsOn: [book]
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: serviceCount == 0
+
+    - id: addBagWithPayment
+      node: addOrderServices
+      dependsOn: [available]
+      values:
+        orderId: {from: book.orderId}
+        serviceId:
+          from: bags.bagServices
+          select:
+            strategy: first
+            field: id
+        amount:
+          from: bags.bagServices
+          select:
+            strategy: first
+            field: amount
+        currency: {from: book.totalCurrency}
+      expectFailure:
+        status: [422]
+        description: A held order takes its services without a payment
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: pay_later_order_no_payment_for_ancillaries
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_state_error
+            raw: true
+
+    - id: addBag
+      node: addOrderServices
+      dependsOn: [addBagWithPayment]
+      isGoal: true
+      values:
+        orderId: {from: book.orderId}
+        serviceId:
+          from: bags.bagServices
+          select:
+            strategy: first
+            field: id
+      expectFailure:
+        status: [400]
+        description: Duffel Airways doesn't add services to a booked order
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.title
+            value: Unsupported operation
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_request_error
+            raw: true
+
+  verification:
+    - node: getOrder
+      purpose: The hold is still unpaid, with no bag and its total unchanged
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'awaitingPayment == true && bagCount == 0 && totalAmount == "{{book.totalAmount}}"'

@@ -1,0 +1,13 @@
+adapter: listAirlineCredits
+protocol: http
+
+request:
+  method: GET
+  path: /air/airline_credits{{?userId}}?user_id={{userId}}{{/userId}}
+
+response:
+  extract:
+    airlineCreditCount: 'data.#'
+    firstAirlineCreditId:
+      path: data.0.id
+      default: ""

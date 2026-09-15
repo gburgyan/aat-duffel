@@ -1,0 +1,19 @@
+# One adult booked and paid, then cancelled: the quote refunds the whole total to the balance, the
+# cancelled order shows that refund, and both a second quote and a second confirmation are refused with
+# already_cancelled. The plan's own steps release both cleanup entries, so cleanup runs nothing.
+kind: recipe
+metadata:
+  prompt: Book a flight, cancel it, and check the refund
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: One adult, paid at once, then cancelled
+  choices:
+    payment: Pay Now
+  addons: [Cancel Order]
+  layers: [party-solo]
+overrides:
+  assertions:
+    inc0_quote:
+      - type: predicate
+        expr: 'refundAmount == "{{inc0_current.totalAmount}}" && refundTo == "balance" && airlineCreditCount == 0'

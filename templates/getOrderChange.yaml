@@ -1,0 +1,14 @@
+adapter: getOrderChange
+protocol: http
+
+request:
+  method: GET
+  path: /air/order_changes/{{orderChangeId}}
+
+response:
+  extract:
+    orderChangeId: data.id
+    changeTotalAmount: data.change_total_amount
+    confirmedAt:
+      path: data.confirmed_at
+      default: ""

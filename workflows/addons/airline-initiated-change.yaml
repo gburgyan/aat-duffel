@@ -1,0 +1,39 @@
+execution:
+  steps:
+    - id: airlineChanges
+      node: listAirlineInitiatedChanges
+      description: >-
+        The order's airline-initiated changes, read once: on Duffel's LHR to LTN test route every read
+        creates another
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              airlineInitiatedChangeCount == 1 && latestActionTaken == "" &&
+              latestAvailableActions == "accept,cancel,change"
+
+    - id: acceptChange
+      node: acceptAirlineInitiatedChange
+      dependsOn: [airlineChanges]
+      description: Accept the change, the latest and so the only one that can be accepted
+      values:
+        airlineInitiatedChangeId: {from: airlineChanges.latestAirlineInitiatedChangeId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'actionTaken == "accepted"'
+
+    - id: afterAccept
+      node: getOrder
+      dependsOn: [acceptChange]
+      description: The order read again, with the accepted change and the flight's new time
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              airlineInitiatedChangeCount == 1 && firstSliceDepartureTime != "{{book.firstSliceDepartureTime}}" &&
+              availableActions == "cancel,change,update"

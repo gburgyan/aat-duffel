@@ -1,0 +1,50 @@
+adapter: createOrderChangeRequest
+protocol: http
+
+request:
+  method: POST
+  path: /air/order_change_requests
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"order_id": "{{orderId}}", "slices": {"remove": [{"slice_id": "{{sliceId}}"}], "add": [{"origin": "{{origin}}", "destination": "{{destination}}", "departure_date": "{{departureDate}}", "cabin_class": "{{cabinClass}}"}]}}}
+
+response:
+  extract:
+    orderChangeRequestId: data.id
+    changeOfferCount:
+      path: 'data.order_change_offers.#'
+      default: 0
+  # One entry per change offer: the cabin and departure time of the flight it adds, and what it costs.
+  # The distinct cabins, times, and totals are joined, so a plan can assert the whole set at once.
+  transform: |
+    local offers, cabins, times, totals, business = {}, {}, {}, {}, 0
+    local function add(set, value) if value ~= "" then set[value] = true end end
+    local function joined(set)
+      local list = {}
+      for value in pairs(set) do table.insert(list, value) end
+      table.sort(list)
+      return table.concat(list, ",")
+    end
+    for _, offer in ipairs(json_path("data.order_change_offers") or {}) do
+      local added = ((offer.slices or {}).add or {})[1] or {}
+      local segment = (added.segments or {})[1] or {}
+      local cabin = ((segment.passengers or {})[1] or {}).cabin_class or ""
+      local departing = segment.departing_at or ""
+      local time = string.sub(departing, 12, 16)
+      if cabin == "business" then business = business + 1 end
+      add(cabins, cabin)
+      add(times, time)
+      add(totals, offer.change_total_amount or "")
+      table.insert(offers, {
+        id = offer.id, cabinClass = cabin, departureTime = time, departureDate = string.sub(departing, 1, 10),
+        changeTotalAmount = offer.change_total_amount, penaltyTotalAmount = offer.penalty_total_amount,
+        newTotalAmount = offer.new_total_amount,
+      })
+    end
+    outputs.changeOffers = offers
+    outputs.cabins = joined(cabins)
+    outputs.departureTimes = joined(times)
+    outputs.changeTotals = joined(totals)
+    outputs.businessOfferCount = business
+    return outputs

@@ -1,0 +1,18 @@
+# Duffel's LHR to LTN test route: reading an order's airline-initiated changes makes Duffel Airways move
+# the flight. The plan reads the list once, accepts the change, and checks the order's flight left at a
+# different time. Cleanup cancels the order, which an accepted change doesn't prevent.
+kind: recipe
+metadata:
+  prompt: Book on the airline-initiated change test route and accept the change
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: One adult from LHR to LTN, with the airline's change accepted
+  choices:
+    payment: Pay Now
+  addons: [Airline-Initiated Change]
+  layers: [party-solo]
+overrides:
+  values:
+    search.origin: LHR
+    search.destination: LTN

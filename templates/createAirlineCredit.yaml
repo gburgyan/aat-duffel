@@ -1,0 +1,18 @@
+adapter: createAirlineCredit
+protocol: http
+
+request:
+  method: POST
+  path: /air/airline_credits
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"airline_iata_code": "{{airlineCode}}", "amount": "{{amount}}", "amount_currency": "{{currency}}", "code": "{{code}}", "issued_on": "{{issuedOn}}", "expires_at": "{{expiresAt}}", "type": "{{creditType}}", "given_name": "{{givenName}}", "family_name": "{{familyName}}"}}
+
+response:
+  extract:
+    airlineCreditId: data.id
+    amount: data.amount
+    code:
+      path: data.code
+      default: ""

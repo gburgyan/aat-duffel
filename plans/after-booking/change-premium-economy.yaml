@@ -1,0 +1,24 @@
+# One adult booked with a seat and a checked bag, then moved a week later to the premium economy flight at
+# 18:00. Duffel Airways offers nine changes (three cabins at three times, each 125.00 with a 25.00
+# penalty); the plan picks exactly one and fails on a tie. After the change the order is in premium
+# economy at 18:00, its total rose by exactly the change's cost, and the seat and bag bought for the old
+# flight are gone. A second change is refused. Cleanup cancels the order.
+kind: recipe
+metadata:
+  prompt: Book a flight with a seat and a bag, then change it to premium economy at 18:00
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: One adult with a seat and a bag, changed to premium economy at 18:00
+  choices:
+    payment: Pay Now
+  addons: [Seats, Checked Bags, Change Flight]
+  layers: [party-solo]
+overrides:
+  assertions:
+    book:
+      - type: predicate
+        expr: 'seatsPerSlice == "1" && bagsPerSlice == "1"'
+    inc2_afterChange:
+      - type: predicate
+        expr: 'seatCount == 0 && bagCount == 0 && seatsPerSlice == "0" && bagsPerSlice == "0"'

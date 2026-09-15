@@ -1,0 +1,126 @@
+execution:
+  steps:
+    - id: changeRequest
+      node: createOrderChangeRequest
+      description: Ask to move the first flight a week later, in premium economy
+      values:
+        orderId: {from: book.orderId}
+        sliceId: {from: book.firstSliceId}
+        origin: {from: book.firstSliceOrigin}
+        destination: {from: book.firstSliceDestination}
+        departureDate: "{{today + 37 days}}"
+        cabinClass: premium_economy
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              changeOfferCount == 9 && cabins == "economy,first,premium_economy" &&
+              departureTimes == "06:00,12:00,18:00" && changeTotals == "125.00"
+
+    - id: changeOffers
+      node: listOrderChangeOffers
+      dependsOn: [changeRequest]
+      description: The same change offers listed, cheapest change first, on one page
+      values:
+        orderChangeRequestId: {from: changeRequest.orderChangeRequestId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'changeOfferCount == "{{changeRequest.changeOfferCount}}" && nextCursor == ""'
+
+    - id: changeOffer
+      node: getOrderChangeOffer
+      dependsOn: [changeOffers]
+      description: The one premium economy change offer at 18:00, read back
+      values:
+        orderChangeOfferId:
+          from: changeRequest.changeOffers
+          select:
+            strategy: min
+            field: id
+            sortField: changeTotalAmount
+            filter: cabinClass == "premium_economy" && departureTime == "18:00"
+            onTie: fail
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              cabinClass == "premium_economy" && departureTime == "18:00" && changeTotalAmount == "125.00" &&
+              penaltyTotalAmount == "25.00"
+
+    - id: pending
+      node: createOrderChange
+      dependsOn: [changeOffer]
+      description: Choose the change offer, which makes a pending change at its cost
+      values:
+        orderChangeOfferId: {from: changeOffer.orderChangeOfferId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              confirmedAt == "" && changeTotalAmount == "{{changeOffer.changeTotalAmount}}" &&
+              addedCabinClass == "premium_economy" && addedDepartureTime == "18:00"
+
+    - id: readChange
+      node: getOrderChange
+      dependsOn: [pending]
+      description: The pending change read back, still unconfirmed
+      values:
+        orderChangeId: {from: pending.orderChangeId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'confirmedAt == "" && changeTotalAmount == "{{pending.changeTotalAmount}}"'
+
+    - id: confirmChange
+      node: confirmOrderChange
+      dependsOn: [readChange]
+      description: Confirm the change, paying its cost from the balance
+      values:
+        orderChangeId: {from: pending.orderChangeId}
+        paymentAmount: {from: pending.paymentAmount}
+        currency: {from: pending.changeTotalCurrency}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: confirmedAt != ""
+
+    - id: afterChange
+      node: getOrder
+      dependsOn: [confirmChange]
+      description: >-
+        The order read again: the first flight is the premium economy one at 18:00, and the total rose by
+        exactly the change's cost
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              confirmedChangeCount == 1 && firstSliceCabin == "premium_economy" && firstSliceDepartureTime == "18:00" &&
+              lastChangeTotalAmount == "{{pending.changeTotalAmount}}" && totalBeforeChanges == "{{book.totalAmount}}" &&
+              availableActions == "cancel,update"
+
+    - id: changeAgain
+      node: createOrderChangeRequest
+      dependsOn: [afterChange]
+      description: A second change request, which Duffel Airways refuses once an order has changed
+      values:
+        orderId: {from: book.orderId}
+        sliceId: {from: afterChange.firstSliceId}
+        origin: {from: afterChange.firstSliceOrigin}
+        destination: {from: afterChange.firstSliceDestination}
+        departureDate: "{{today + 40 days}}"
+      expectFailure:
+        status: [422]
+        description: An order that has changed can't change again through the API
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: order_not_changeable
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_state_error
+            raw: true
