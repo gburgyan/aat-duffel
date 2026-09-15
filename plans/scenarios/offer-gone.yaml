@@ -14,6 +14,10 @@ execution:
       values:
         origin: LGW
         destination: LHR
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
 
     - id: offers
       node: listOffers

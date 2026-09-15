@@ -1,11 +1,12 @@
-# Airports and cities, read-only: two pages of airports joined by their cursor, Heathrow read by
-# the ID a place lookup returned, and London read by the city ID on that same suggestion.
+# Airports and cities, read-only: two pages of airports joined by their cursor, a page of cities with
+# their airports, Heathrow read by the ID a place lookup returned, and London read by the city ID on
+# that same suggestion.
 metadata:
-  prompt: Page through airports, and read Heathrow and London by ID
+  prompt: Page through airports and cities, and read Heathrow and London by ID
   graphVersion: "1.0.0"
 intent:
   goal: london
-  description: Page through airports with a cursor, then read an airport and its city by the IDs a place lookup returned
+  description: Page through airports and cities, then read an airport and its city by the IDs a place lookup returned
 
 execution:
   steps:
@@ -30,6 +31,19 @@ execution:
         mechanical:
           - type: predicate
             expr: pageSize == 5 && nextCursor != ""
+
+    - id: cities
+      node: listCities
+      description: A page of cities, each listing the airports Duffel groups under it
+      values:
+        limit: 5
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: pageSize == 5 && nextCursor != ""
+          - type: fieldExists
+            path: data.0.airports.0.iata_code
+            raw: true
 
     - id: heathrow
       node: suggestPlaces

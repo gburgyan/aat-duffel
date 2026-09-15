@@ -93,8 +93,9 @@ concepts:
       EWR only holdable ones, LHR to DXB connecting flights, DXB to AMS a stop within a flight, BTS to MRU
       no baggage, BTS to ABV no extra services, STN to LHR a search timeout (504
       gateway_timeout_error), LGW to LHR an offer gone by the time it's read (422
-      offer_no_longer_available), and LHR to STN a price that rises 10.00 with every read. Proven by the
-      plans under plans/scenarios/.
+      offer_no_longer_available), and LHR to STN a price that rises 10.00 with every read. The plans
+      under plans/scenarios/ prove all but the last, which runs showed but no plan asserts yet: that
+      needs comparing an output with an earlier step's.
     applies_to: [origin, destination]
 
   productAccess:
