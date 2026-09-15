@@ -17,3 +17,9 @@ visualizers:
     file: seat-map.html
     match:
       bodyPath: data.0.cabins
+
+  - id: order
+    name: Order
+    file: order.html
+    match:
+      bodyPath: data.booking_reference

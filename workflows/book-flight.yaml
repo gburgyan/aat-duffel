@@ -1,0 +1,62 @@
+intent:
+  goal: book
+  description: Search, pick the Duffel Airways offer, price what the order buys, and book it
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      description: Search for flights; a test token never reaches live offers
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      description: A page of offers, cheapest first, direct flights only
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+        maxConnections: 0
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      description: The Duffel Airways offer, with each passenger's details for the order
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: ownerCode == "ZZ" && liveMode == false
+
+    - id: price
+      node: priceOffer
+      dependsOn: [offer]
+      description: The offer priced with the seats and bags the order buys, for a balance payment
+      values:
+        offerId: {from: offer.offerId}
+        seatServices: AUTOWIRE?
+        bagServices: AUTOWIRE?
+
+    - slot: payment
+      dependsOn: [price]
+
+  verification:
+    - node: getOrder
+      purpose: The order is booked in test mode, tagged as this package's, and not cancelled
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'liveMode == false && cancelledAt == "" && metadataSource == "aat-duffel"'

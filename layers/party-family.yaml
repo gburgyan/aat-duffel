@@ -1,0 +1,6 @@
+name: party-family
+description: Two adults, a child, and an infant
+selectionHint: A family of four with an infant
+inputs:
+  createOfferRequest.passengerAges:
+    value: [40, 38, 8, 1]

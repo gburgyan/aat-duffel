@@ -9,8 +9,8 @@ request:
   body: |
     {
       "data": {
-        "intended_payment_methods": [{"type": "balance"}]{{?services}},
-        "intended_services": [{{#services}}{"id": "{{.id}}", "quantity": {{.quantity}}}{{/services}}]{{/services}}
+        "intended_payment_methods": [{"type": "balance"}]{{?services|seatServices|bagServices}},
+        "intended_services": [{{?services}}{{#services}}{"id": "{{.id}}", "quantity": {{.quantity}}}{{/services}}{{/services}}{{?seatServices}}{{?services}}, {{/services}}{{#seatServices}}{"id": "{{.id}}", "quantity": 1}{{/seatServices}}{{/seatServices}}{{?bagServices}}{{?services|seatServices}}, {{/services|seatServices}}{{#bagServices}}{"id": "{{.id}}", "quantity": 1}{{/bagServices}}{{/bagServices}}]{{/services|seatServices|bagServices}}
       }
     }
 
@@ -22,3 +22,9 @@ response:
     intendedServiceCount:
       path: 'data.intended_services.#'
       default: 0
+    intendedServices:
+      path: data.intended_services
+      default: []
+      fields:
+        id: id
+        quantity: quantity

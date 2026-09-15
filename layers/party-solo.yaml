@@ -1,0 +1,6 @@
+name: party-solo
+description: One adult
+selectionHint: A single traveller
+inputs:
+  createOfferRequest.passengerAges:
+    value: [35]

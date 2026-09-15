@@ -1,0 +1,23 @@
+execution:
+  steps:
+    - id: patch
+      node: updateOrder
+      description: Replace the order's metadata with a new reference, keeping its source tag
+      values:
+        orderId: AUTOWIRE
+        reference: "updated-{{random 10}}"
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'metadataSource == "aat-duffel" && metadataReference == "{{reference}}"'
+
+    - id: found
+      node: listOrders
+      dependsOn: [patch]
+      description: The order found by its booking reference
+      values:
+        bookingReference: AUTOWIRE
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: orderCount == 1 && ourOrderCount == 1

@@ -1,0 +1,83 @@
+# Duffel's LGW to STN test route refuses an order paid from the balance as if the wallet were empty:
+# 422 insufficient_balance, an invalid_state_error. No order is created.
+metadata:
+  prompt: Book on Duffel's insufficient balance test route
+  graphVersion: "1.0.0"
+intent:
+  goal: book
+  description: An order paid from the balance on the insufficient balance route is refused, and none is created
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        origin: LGW
+        destination: STN
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+
+    - id: price
+      node: priceOffer
+      dependsOn: [offer]
+      values:
+        offerId: {from: offer.offerId}
+
+    - id: book
+      node: createOrder
+      dependsOn: [price]
+      isGoal: true
+      values:
+        orderType: instant
+        offerId: {from: offer.offerId}
+        bookingPassengers: {from: offer.bookingPassengers}
+        amount: {from: price.totalAmount}
+        currency: {from: price.totalCurrency}
+      expectFailure:
+        status: [422]
+        description: The balance payment is refused for want of funds
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: insufficient_balance
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_state_error
+            raw: true
+
+  verification:
+    - node: listOrders
+      purpose: No order was booked from the offer
+      values:
+        offerId: {from: offer.offerId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: orderCount == 0

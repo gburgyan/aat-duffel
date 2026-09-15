@@ -725,6 +725,54 @@ nodes:
       - name: checkedBagAmount
         type: string
         description: That bag's price; "" when the offer sells none
+      - name: totalAmountCents
+        type: integer
+        description: totalAmount in cents, to compare prices as whole numbers
+      - name: bookingPassengers
+        type: bookingPassenger[]
+        description: >-
+          The passengers as createOrder names them, each with a title, gender, names, and a birth date that
+          fits the age searched; adults who carry an infant are in infantCarers instead
+        elementFields:
+          - name: id
+            type: string
+          - name: type
+            type: string
+          - name: age
+            type: integer
+          - name: title
+            type: string
+          - name: gender
+            type: string
+          - name: givenName
+            type: string
+          - name: familyName
+            type: string
+          - name: bornOn
+            type: string
+      - name: infantCarers
+        type: bookingPassenger[]
+        optional: true
+        description: Adults who carry an infant, each with the infant's pas_ ID as infantPassengerId; absent without infants
+        elementFields:
+          - name: id
+            type: string
+          - name: type
+            type: string
+          - name: age
+            type: integer
+          - name: title
+            type: string
+          - name: gender
+            type: string
+          - name: givenName
+            type: string
+          - name: familyName
+            type: string
+          - name: bornOn
+            type: string
+          - name: infantPassengerId
+            type: string
     satisfies: [offerSelected]
 
   priceOffer:
@@ -743,7 +791,15 @@ nodes:
       - name: services
         type: serviceSelection[]
         optional: true
-        description: The services the order will buy, as a list of {id, quantity}; without them the request sends no intended_services
+        description: Services the order will buy, as a list of {id, quantity}
+      - name: seatServices
+        type: serviceSelection[]
+        optional: true
+        description: Seats the order will buy, each {id}, as getSeatMaps picks them
+      - name: bagServices
+        type: serviceSelection[]
+        optional: true
+        description: Checked bags the order will buy, each {id}, as getOfferBags lists them
     outputs:
       - name: offerId
         type: string
@@ -754,6 +810,14 @@ nodes:
         type: string
       - name: intendedServiceCount
         type: integer
+      - name: intendedServices
+        type: serviceSelection[]
+        description: The services priced, each {id, quantity}, which createOrder books as they are
+        elementFields:
+          - name: id
+            type: string
+          - name: quantity
+            type: integer
 
   listUpsellOffers:
     description: >-
@@ -860,6 +924,26 @@ nodes:
       - name: restrictedSeatCount
         type: integer
         description: Seats for sale that carry a disclosure
+      - name: seatServices
+        type: seatPick[]
+        optional: true
+        description: >-
+          The seats an order buys: for each passenger on each segment, the first seat for sale with no
+          disclosure that no one else has; absent when there are none
+        elementFields:
+          - name: id
+            type: string
+          - name: designator
+            type: string
+          - name: passengerId
+            type: string
+          - name: segmentId
+            type: string
+          - name: amount
+            type: string
+      - name: seatablePairCount
+        type: integer
+        description: Passenger and segment pairs with any seat for sale
 
   createBatchOfferRequest:
     description: >-
@@ -936,6 +1020,457 @@ nodes:
       - name: zzOfferCount
         type: integer
 
+  # --- Orders -------------------------------------------------------------------------------
+
+  listOrders:
+    description: >-
+      Page through the account's orders (GET /air/orders, 200) with cursor pagination: limit is 1 to
+      200, and after takes the previous page's meta.after. Filters narrow the list to the orders booked
+      from an offer, a booking reference, a customer user's orders, or orders by payment state. Orders
+      this package books carry metadata.source "aat-duffel", and each page counts those, the ones of
+      them still active (not cancelled), and active orders from anywhere else, apart.
+    adapter: listOrders
+    tags: [orders, pagination]
+    inputs:
+      - name: limit
+        type: integer
+        default: 200
+        description: Orders per page, 1 to 200
+        constraints:
+          min: 1
+          max: 200
+      - name: after
+        type: string
+        optional: true
+        description: The cursor from the previous page's nextCursor
+      - name: offerId
+        type: string
+        optional: true
+        description: Only the orders booked from this offer
+      - name: bookingReference
+        type: string
+        optional: true
+        description: Only the order with this booking reference
+      - name: userId
+        type: string
+        optional: true
+        description: Only the orders a customer user (icu_) is attached to
+      - name: awaitingPayment
+        type: boolean
+        optional: true
+        description: true for orders still awaiting payment, false for the rest
+    outputs:
+      - name: orderCount
+        type: integer
+        display: Orders read
+      - name: ourOrderCount
+        type: integer
+        description: Orders on the page this package booked (metadata.source is aat-duffel)
+      - name: ourActiveOrderCount
+        type: integer
+        display: Ours still active
+        description: Of the package's orders, those not cancelled
+      - name: ourActiveOrders
+        type: activeOrder[]
+        optional: true
+        description: The package's orders that are still active, when there are any
+        elementFields:
+          - name: id
+            type: string
+          - name: bookingReference
+            type: string
+          - name: createdAt
+            type: string
+      - name: otherActiveOrderCount
+        type: integer
+        display: Other active orders
+        description: Active orders this package didn't book, such as those earlier projects left
+      - name: liveModeOrderCount
+        type: integer
+        description: Orders booked in live mode; 0 on a test-mode account
+      - name: nextCursor
+        type: string
+        description: The cursor for the next page; "" on the last page
+
+  getOfferBags:
+    description: >-
+      Read an offer's extra checked bags (GET /air/offers/{id}?return_available_services=true, 200), one
+      service per passenger and segment. A step of its own names the bags an order buys, so getOffer's
+      outputs don't wire bags into every order.
+    adapter: getOfferBags
+    tags: [offers, bags]
+    inputs:
+      - name: offerId
+        type: string
+        default:
+          from: getOffer.offerId
+    outputs:
+      - name: bagServices
+        type: bagService[]
+        elementFields:
+          - name: id
+            type: string
+          - name: passengerId
+            type: string
+          - name: segmentId
+            type: string
+          - name: amount
+            type: string
+      - name: bagServiceCount
+        type: integer
+
+  createOrder:
+    description: >-
+      Book an offer (POST /air/orders, 201). An instant order pays from the balance, with amount and
+      currency exactly the priced total, services included; a hold order sends no payment and is paid
+      later with createPayment. Each passenger is named with the offer's pas_ ID, a title, gender, names,
+      and a birth date that fits the age searched, and an adult who carries an infant names that infant.
+      Every order carries metadata.source "aat-duffel". Its cleanup cancels the order.
+    adapter: createOrder
+    tags: [orders, booking]
+    inputs:
+      - name: orderType
+        type: enum[instant, hold]
+        default: instant
+      - name: offerId
+        type: string
+        default:
+          from: getOffer.offerId
+      - name: bookingPassengers
+        type: bookingPassenger[]
+        default:
+          from: getOffer.bookingPassengers
+      - name: infantCarers
+        type: bookingPassenger[]
+        optional: true
+        description: Adults who carry an infant, from getOffer.infantCarers
+      - name: services
+        type: serviceSelection[]
+        optional: true
+        description: Services to buy, as priceOffer.intendedServices lists them
+      - name: amount
+        type: string
+        optional: true
+        description: The payment, exactly the priced total; leave it out for a hold order
+      - name: currency
+        type: string
+        optional: true
+      - name: email
+        type: string
+        default: "{{env.contactEmail}}"
+      - name: phoneNumber
+        type: string
+        default: "{{env.contactPhone}}"
+      - name: userId
+        type: string
+        optional: true
+        description: A customer user (icu_) to attach to the order
+      - name: reference
+        type: string
+        optional: true
+        description: A reference stored in the order's metadata next to its source
+    outputs:
+      - name: orderId
+        type: string
+      - name: bookingReference
+        type: string
+        display: Booking
+      - name: liveMode
+        type: boolean
+      - name: orderType
+        type: string
+      - name: totalAmount
+        type: string
+        display: Order total
+      - name: totalCurrency
+        type: string
+      - name: totalAmountCents
+        type: integer
+      - name: awaitingPayment
+        type: boolean
+      - name: paymentRequiredBy
+        type: string
+      - name: priceGuaranteeExpiresAt
+        type: string
+      - name: paidAt
+        type: string
+      - name: cancelledAt
+        type: string
+      - name: availableActions
+        type: string
+        description: The actions the order allows, sorted and joined by commas, such as cancel,change,update
+      - name: cancellable
+        type: boolean
+      - name: passengerCount
+        type: integer
+      - name: adultCount
+        type: integer
+      - name: childCount
+        type: integer
+      - name: infantCount
+        type: integer
+      - name: loyaltyAccountCount
+        type: integer
+      - name: sliceCount
+        type: integer
+      - name: slices
+        type: orderSlice[]
+        elementFields:
+          - name: id
+            type: string
+          - name: origin
+            type: string
+          - name: destination
+            type: string
+          - name: departureDate
+            type: string
+          - name: cabinClass
+            type: string
+      - name: firstSliceId
+        type: string
+      - name: serviceCount
+        type: integer
+      - name: seatCount
+        type: integer
+      - name: bagCount
+        type: integer
+      - name: metadataSource
+        type: string
+      - name: metadataReference
+        type: string
+      - name: userCount
+        type: integer
+    cleanup:
+      node: createOrderCancellation
+      when: cancellable == true
+
+  getOrder:
+    description: >-
+      Read an order (GET /air/orders/{id}, 200): its payment state, the actions it allows, its passengers
+      by type, slices with their cabin, services, and metadata.
+    adapter: getOrder
+    tags: [orders]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+    outputs:
+      - name: orderId
+        type: string
+      - name: bookingReference
+        type: string
+        display: Booking
+      - name: liveMode
+        type: boolean
+      - name: orderType
+        type: string
+      - name: totalAmount
+        type: string
+        display: Order total
+      - name: totalCurrency
+        type: string
+      - name: totalAmountCents
+        type: integer
+      - name: awaitingPayment
+        type: boolean
+      - name: paymentRequiredBy
+        type: string
+      - name: priceGuaranteeExpiresAt
+        type: string
+      - name: paidAt
+        type: string
+      - name: cancelledAt
+        type: string
+      - name: availableActions
+        type: string
+        description: The actions the order allows, sorted and joined by commas, such as cancel,change,update
+      - name: cancellable
+        type: boolean
+      - name: passengerCount
+        type: integer
+      - name: adultCount
+        type: integer
+      - name: childCount
+        type: integer
+      - name: infantCount
+        type: integer
+      - name: loyaltyAccountCount
+        type: integer
+      - name: sliceCount
+        type: integer
+      - name: slices
+        type: orderSlice[]
+        elementFields:
+          - name: id
+            type: string
+          - name: origin
+            type: string
+          - name: destination
+            type: string
+          - name: departureDate
+            type: string
+          - name: cabinClass
+            type: string
+      - name: firstSliceId
+        type: string
+      - name: serviceCount
+        type: integer
+      - name: seatCount
+        type: integer
+      - name: bagCount
+        type: integer
+      - name: metadataSource
+        type: string
+      - name: metadataReference
+        type: string
+      - name: userCount
+        type: integer
+
+  updateOrder:
+    description: >-
+      Replace an order's metadata (PATCH /air/orders/{id}, 200), the only thing it updates. The request
+      sends the source tag again with the new reference.
+    adapter: updateOrder
+    tags: [orders]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+      - name: reference
+        type: string
+    outputs:
+      - name: orderId
+        type: string
+      - name: metadataSource
+        type: string
+      - name: metadataReference
+        type: string
+
+  createOrderCancellation:
+    description: >-
+      Quote an order's cancellation (POST /air/order_cancellations, 201): the refund, where it goes, and
+      when the quote expires. Nothing is cancelled until confirmOrderCancellation, which cleanup runs next.
+    adapter: createOrderCancellation
+    tags: [orders, cancellations]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+    outputs:
+      - name: orderCancellationId
+        type: string
+      - name: refundAmount
+        type: string
+        display: Refund
+      - name: refundCurrency
+        type: string
+      - name: refundTo
+        type: string
+      - name: expiresAt
+        type: string
+      - name: airlineCreditCount
+        type: integer
+    cleanup: confirmOrderCancellation
+
+  confirmOrderCancellation:
+    description: >-
+      Confirm a cancellation quote (POST /air/order_cancellations/{id}/actions/confirm, 200), which
+      cancels the order and refunds it.
+    adapter: confirmOrderCancellation
+    tags: [orders, cancellations]
+    inputs:
+      - name: orderCancellationId
+        type: string
+        default:
+          from: createOrderCancellation.orderCancellationId
+    outputs:
+      - name: orderCancellationId
+        type: string
+      - name: confirmedAt
+        type: string
+      - name: refundAmount
+        type: string
+      - name: refundTo
+        type: string
+
+  createPayment:
+    description: >-
+      Pay a held order from the balance (POST /air/payments, 201), with amount and currency exactly the
+      order's total.
+    adapter: createPayment
+    tags: [orders, payments]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+      - name: amount
+        type: string
+      - name: currency
+        type: string
+    outputs:
+      - name: paymentId
+        type: string
+      - name: amount
+        type: string
+        display: Paid
+      - name: currency
+        type: string
+      - name: paymentType
+        type: string
+      - name: paymentStatus
+        type: string
+
+  listPayments:
+    description: List an order's payments (GET /air/payments?order_id=, 200).
+    adapter: listPayments
+    tags: [orders, payments]
+    inputs:
+      - name: orderId
+        type: string
+        default:
+          from: createOrder.orderId
+    outputs:
+      - name: paymentCount
+        type: integer
+      - name: payments
+        type: payment[]
+        elementFields:
+          - name: id
+            type: string
+          - name: amount
+            type: string
+          - name: currency
+            type: string
+          - name: type
+            type: string
+          - name: status
+            type: string
+
+  getPayment:
+    description: Read one payment by its ID (GET /air/payments/{id}, 200).
+    adapter: getPayment
+    tags: [orders, payments]
+    inputs:
+      - name: paymentId
+        type: string
+        default:
+          from: createPayment.paymentId
+    outputs:
+      - name: paymentId
+        type: string
+      - name: amount
+        type: string
+      - name: currency
+        type: string
+      - name: paymentType
+        type: string
+      - name: paymentStatus
+        type: string
+
 workflows:
   - name: Find Offer
     description: Search, list the offers cheapest first, and read the Duffel Airways offer at its latest price
@@ -965,3 +1500,45 @@ workflows:
     description: Ask for upsell offers, which Duffel Airways refuses with 422 unsupported_action
     after: [getOffer]
     template: workflows/addons/upsell-refused.yaml
+
+  - name: Book Flight
+    description: Search, pick the Duffel Airways offer, price what the order buys, and book it, paid at once or held
+    template: workflows/book-flight.yaml
+    slots:
+      - name: payment
+        options: [Pay Now, Hold, Hold Then Pay]
+        default: Pay Now
+    selectionHint: Booking an order for one to four passengers, with seats, bags, loyalty, or metadata
+
+  - name: Pay Now
+    kind: slot
+    description: Book the offer and pay the priced total from the balance
+    template: workflows/slots/pay-now.yaml
+
+  - name: Hold
+    kind: slot
+    description: Hold the offer unpaid, to be paid by its deadline
+    template: workflows/slots/hold.yaml
+
+  - name: Hold Then Pay
+    kind: slot
+    description: Hold the offer, then pay it at the total it was held for
+    template: workflows/slots/hold-then-pay.yaml
+
+  - name: Seats
+    kind: addon
+    description: Pick a seat for each passenger on each flight, bought with the order
+    after: [getOffer]
+    template: workflows/addons/seats.yaml
+
+  - name: Checked Bags
+    kind: addon
+    description: Buy an extra checked bag for each passenger on each flight, with the order
+    after: [getOffer]
+    template: workflows/addons/checked-bags.yaml
+
+  - name: Update Metadata
+    kind: addon
+    description: Replace the order's metadata, then find the order by its booking reference
+    after: [createPayment, createOrder]
+    template: workflows/addons/update-metadata.yaml

@@ -1,0 +1,90 @@
+# Duffel's LHR to STN test route raises the offer's price on every read. The second read costs more than
+# the first, and an order paid at the first read's total is refused: 422
+# payment_amount_does_not_match_order_amount, a validation_error. No order is created.
+metadata:
+  prompt: Book a stale price on Duffel's price change test route
+  graphVersion: "1.0.0"
+intent:
+  goal: book
+  description: The price rises between reads, and an order paid at the old price is refused
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        origin: LHR
+        destination: STN
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+
+    - id: reread
+      node: getOffer
+      dependsOn: [offer]
+      description: The same offer read again costs more
+      values:
+        offerId: {from: offer.offerId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'totalAmount > "{{offer.totalAmount}}"'
+
+    - id: book
+      node: createOrder
+      dependsOn: [reread]
+      isGoal: true
+      description: Pay the first read's total, which the order no longer costs
+      values:
+        orderType: instant
+        offerId: {from: offer.offerId}
+        bookingPassengers: {from: offer.bookingPassengers}
+        amount: {from: offer.totalAmount}
+        currency: {from: offer.totalCurrency}
+      expectFailure:
+        status: [422]
+        description: The payment doesn't match the order's current total
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: payment_amount_does_not_match_order_amount
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: validation_error
+            raw: true
+
+  verification:
+    - node: listOrders
+      purpose: No order was booked from the offer
+      values:
+        offerId: {from: offer.offerId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: orderCount == 0

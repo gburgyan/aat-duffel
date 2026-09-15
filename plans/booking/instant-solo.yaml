@@ -1,0 +1,17 @@
+# One adult booked and paid at once: the order pays exactly the priced total from the balance, carries
+# the package's metadata tag, and allows cancel, change, and update. Cleanup cancels it.
+kind: recipe
+metadata:
+  prompt: Book one adult on the Duffel Airways offer and pay at once
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: One adult, direct flights, paid from the balance
+  choices:
+    payment: Pay Now
+  layers: [party-solo]
+overrides:
+  assertions:
+    book:
+      - type: predicate
+        expr: passengerCount == 1 && adultCount == 1 && serviceCount == 0 && sliceCount == 1

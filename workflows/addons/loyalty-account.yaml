@@ -4,7 +4,7 @@ execution:
       node: updateOfferPassenger
       description: Name the passenger and attach Duffel's test loyalty account
       values:
-        offerId: AUTOWIRE
+        offerId: {from: offer.offerId}
         passengerId:
           from: offer.passengers
           select:
@@ -24,7 +24,7 @@ execution:
       dependsOn: [member]
       description: The offer read again at the member price, 10% off for this account
       values:
-        offerId: AUTOWIRE
+        offerId: {from: offer.offerId}
       assertions:
         mechanical:
           - type: fieldEquals

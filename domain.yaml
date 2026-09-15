@@ -84,7 +84,9 @@ concepts:
     description: >-
       A passenger's loyalty programme accounts are attached to the offer before booking, with PATCH on
       the offer's passenger. Duffel's test account (Amelia Earhart, airline ZZ, number 1234567890) takes
-      10% off a Duffel Airways offer: 229.05 became 206.15. Proven by plans/search/loyalty.yaml.
+      10% off a Duffel Airways offer: 229.05 became 206.15. An order booked afterwards is priced at the
+      member price and keeps the account. Proven by plans/search/loyalty.yaml and
+      plans/booking/loyalty-member.yaml.
     applies_to: [passengerId, loyaltyAccountNumber]
 
   testRoutes:
@@ -93,10 +95,53 @@ concepts:
       EWR only holdable ones, LHR to DXB connecting flights, DXB to AMS a stop within a flight, BTS to MRU
       no baggage, BTS to ABV no extra services, STN to LHR a search timeout (504
       gateway_timeout_error), LGW to LHR an offer gone by the time it's read (422
-      offer_no_longer_available), and LHR to STN a price that rises 10.00 with every read. The plans
-      under plans/scenarios/ prove all but the last, which runs showed but no plan asserts yet: that
-      needs comparing an output with an earlier step's.
+      offer_no_longer_available), and LHR to STN a price that rises 10.00 with every read. On the
+      order side, LHR to LGW fails the order with 502 airline_unknown (an airline_error), LGW to STN
+      refuses a balance payment with 422 insufficient_balance (an invalid_state_error), and an order
+      paid at LHR to STN's earlier price is refused with 422 payment_amount_does_not_match_order_amount
+      (a validation_error). None of the refused orders exists afterwards. Proven by the plans under
+      plans/scenarios/.
     applies_to: [origin, destination]
+
+  orders:
+    description: >-
+      POST /air/orders books an offer and answers 201 in about half a second. Each passenger is named
+      with the offer's pas_ ID, a title, gender, given and family names, a birth date, an email, and a
+      phone number, and the birth date must fit the age searched as of the last slice's departure.
+      An infant is booked by naming its pas_ ID as infant_passenger_id on one adult; the order's
+      passengers echo neither that link nor a passenger type. "services": [] is accepted. An order
+      stores the metadata it is booked with, and PATCH replaces the metadata, the only thing an order
+      update changes. The list filters booking_reference and offer_id find exactly the order. Proven by
+      the plans under plans/booking/.
+    applies_to: [orderId, bookingPassengers, infantCarers, bookingReference, metadataSource, metadataReference]
+    constraint: send amount and currency exactly as the price action returns them, services included
+
+  holdsAndPayments:
+    description: >-
+      An instant order pays from the balance at exactly the priced total. A hold order sends no payment:
+      it is awaiting payment, due 72 hours after the offer request was created, with its price
+      guaranteed for 48 hours, and seats and bags can be held with it. POST /air/payments at the held
+      total pays it (status succeeded, type balance), after which the order is no longer awaiting
+      payment and its total is unchanged; GET /air/payments?order_id= lists the one payment. Proven by
+      plans/booking/hold-couple.yaml and plans/booking/hold-then-pay-trio-seats.yaml.
+    applies_to: [orderType, awaitingPayment, paymentRequiredBy, priceGuaranteeExpiresAt, paymentId]
+
+  servicesAtBooking:
+    description: >-
+      Seats and extra bags are priced with the offer and bought with the order. The price action echoes
+      intended_services, and the order books exactly those, adding 20.00 for each Duffel Airways seat
+      and each extra 23 kg bag. An infant on an adult's lap takes no seat. Proven by
+      plans/booking/instant-family-seats-bags.yaml.
+    applies_to: [seatServices, bagServices, intendedServices, seatCount, bagCount]
+
+  cleanupAndGuard:
+    description: >-
+      Every order the plans book carries metadata.source "aat-duffel" and is cancelled in cleanup: a
+      cancellation quote, then its confirmation. plans/zz-no-live-orders.yaml reads every page of the
+      account's orders and fails when one of the package's orders is still active; orders from other
+      sources are counted apart. When the package was built the account held 267 orders from earlier
+      projects, none of them active.
+    applies_to: [ourOrderCount, ourActiveOrderCount, otherActiveOrderCount]
 
   productAccess:
     description: >-
@@ -116,7 +161,8 @@ types:
     description: >-
       A Duffel identifier: a prefix naming the resource, an underscore, and an opaque body.
       Reference data uses arp_ (airport), cit_ (city), arl_ (airline), arc_ (aircraft), and loy_
-      (loyalty programme).
+      (loyalty programme); searches orq_ (offer request), off_ (offer), pas_ (passenger), sli_
+      (slice), and seg_ (segment); orders ord_ (order), ase_ (service), and pay_ (payment).
     format: string
     validation: "^[a-z]{3}_[A-Za-z0-9_]+$"
 

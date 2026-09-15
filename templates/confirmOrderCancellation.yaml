@@ -1,0 +1,19 @@
+adapter: confirmOrderCancellation
+protocol: http
+
+request:
+  method: POST
+  path: /air/order_cancellations/{{orderCancellationId}}/actions/confirm
+
+response:
+  extract:
+    orderCancellationId: data.id
+    confirmedAt:
+      path: data.confirmed_at
+      default: ""
+    refundAmount:
+      path: data.refund_amount
+      default: ""
+    refundTo:
+      path: data.refund_to
+      default: ""

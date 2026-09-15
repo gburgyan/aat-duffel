@@ -1,0 +1,83 @@
+# Duffel's LHR to LGW test route fails an order as the airline answers it: 502 airline_unknown, an
+# airline_error from Duffel Airways. The offer searches and prices normally, and no order is created.
+metadata:
+  prompt: Book on Duffel's order creation error test route
+  graphVersion: "1.0.0"
+intent:
+  goal: book
+  description: An order on the order creation error route fails with the airline's error, and none is created
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        origin: LHR
+        destination: LGW
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+
+    - id: price
+      node: priceOffer
+      dependsOn: [offer]
+      values:
+        offerId: {from: offer.offerId}
+
+    - id: book
+      node: createOrder
+      dependsOn: [price]
+      isGoal: true
+      values:
+        orderType: instant
+        offerId: {from: offer.offerId}
+        bookingPassengers: {from: offer.bookingPassengers}
+        amount: {from: price.totalAmount}
+        currency: {from: price.totalCurrency}
+      expectFailure:
+        status: [502]
+        description: The airline answers the order with an error Duffel doesn't recognise
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: airline_unknown
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: airline_error
+            raw: true
+
+  verification:
+    - node: listOrders
+      purpose: No order was booked from the offer
+      values:
+        offerId: {from: offer.offerId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: orderCount == 0

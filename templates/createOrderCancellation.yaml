@@ -1,0 +1,29 @@
+adapter: createOrderCancellation
+protocol: http
+
+request:
+  method: POST
+  path: /air/order_cancellations
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"order_id": "{{orderId}}"}}
+
+response:
+  extract:
+    orderCancellationId: data.id
+    refundAmount:
+      path: data.refund_amount
+      default: ""
+    refundCurrency:
+      path: data.refund_currency
+      default: ""
+    refundTo:
+      path: data.refund_to
+      default: ""
+    expiresAt:
+      path: data.expires_at
+      default: ""
+    airlineCreditCount:
+      path: 'data.airline_credits.#'
+      default: 0

@@ -1,0 +1,125 @@
+adapter: createOrder
+protocol: http
+
+request:
+  method: POST
+  path: /air/orders
+  headers:
+    Content-Type: application/json
+  # An instant order pays exactly the priced total from the balance; a hold order leaves amount out and
+  # is paid later. An adult who carries an infant comes in infantCarers, everyone else in
+  # bookingPassengers. Every order is tagged with metadata.source, so the guard can tell this package's
+  # orders apart from others on the account.
+  body: |
+    {
+      "data": {
+        "type": "{{orderType}}",
+        "selected_offers": ["{{offerId}}"],{{?services}}
+        "services": [{{#services}}{"id": "{{.id}}", "quantity": {{.quantity}}}{{/services}}],{{/services}}{{?amount}}
+        "payments": [{"type": "balance", "amount": "{{amount}}", "currency": "{{currency}}"}],{{/amount}}{{?userId}}
+        "users": ["{{userId}}"],{{/userId}}
+        "metadata": {"source": "aat-duffel"{{?reference}}, "reference": "{{reference}}"{{/reference}}},
+        "passengers": [{{#bookingPassengers}}{"id": "{{.id}}", "title": "{{.title}}", "gender": "{{.gender}}", "given_name": "{{.givenName}}", "family_name": "{{.familyName}}", "born_on": "{{.bornOn}}", "email": "{{email}}", "phone_number": "{{phoneNumber}}"}{{/bookingPassengers}}{{?infantCarers}}, {{#infantCarers}}{"id": "{{.id}}", "title": "{{.title}}", "gender": "{{.gender}}", "given_name": "{{.givenName}}", "family_name": "{{.familyName}}", "born_on": "{{.bornOn}}", "email": "{{email}}", "phone_number": "{{phoneNumber}}", "infant_passenger_id": "{{.infantPassengerId}}"}{{/infantCarers}}{{/infantCarers}}]
+      }
+    }
+
+response:
+  extract:
+    orderId: data.id
+    bookingReference: data.booking_reference
+    liveMode: data.live_mode
+    orderType:
+      path: data.type
+      default: ""
+    totalAmount: data.total_amount
+    totalCurrency: data.total_currency
+    sliceCount: 'data.slices.#'
+    passengerCount: 'data.passengers.#'
+    firstSliceId: data.slices.0.id
+    serviceCount:
+      path: 'data.services.#'
+      default: 0
+    userCount:
+      path: 'data.users.#'
+      default: 0
+  # The same transform reads an order in createOrder and getOrder: payment state, actions, passengers
+  # by type, slices with their cabin, services by type, and metadata.
+  transform: |
+    local order = json_path("data") or {}
+    local function text(v)
+      if v == nil then return "" end
+      return tostring(v)
+    end
+    local function cents(amount)
+      local sign, whole, frac = string.match(amount or "", "^(%-?)(%d+)%.?(%d*)$")
+      if not whole then return 0 end
+      local value = tonumber(whole) * 100 + tonumber((frac .. "00"):sub(1, 2))
+      if sign == "-" then value = -value end
+      return value
+    end
+    outputs.totalAmountCents = cents(order.total_amount)
+
+    local payment = order.payment_status or {}
+    outputs.awaitingPayment = payment.awaiting_payment == true
+    outputs.paymentRequiredBy = text(payment.payment_required_by)
+    outputs.priceGuaranteeExpiresAt = text(payment.price_guarantee_expires_at)
+    outputs.paidAt = text(payment.paid_at)
+    outputs.cancelledAt = text(order.cancelled_at)
+
+    local actions = {}
+    for _, action in ipairs(order.available_actions or {}) do table.insert(actions, action) end
+    table.sort(actions)
+    outputs.availableActions = table.concat(actions, ",")
+    outputs.cancellable = false
+    for _, action in ipairs(actions) do
+      if action == "cancel" then outputs.cancellable = true end
+    end
+
+    -- An order's passengers carry no type, so count them by age on the last slice's departure date,
+    -- the date Duffel checks birth dates against.
+    local orderSlices = order.slices or {}
+    local lastSegment = ((orderSlices[#orderSlices] or {}).segments or {})[1] or {}
+    local ty, tm, td = string.match(lastSegment.departing_at or "", "^(%d+)-(%d+)-(%d+)")
+    local adults, children, infants, loyalty = 0, 0, 0, 0
+    for _, passenger in ipairs(order.passengers or {}) do
+      local by, bm, bd = string.match(passenger.born_on or "", "^(%d+)-(%d+)-(%d+)$")
+      if ty and by then
+        local age = tonumber(ty) - tonumber(by)
+        if tonumber(tm) * 100 + tonumber(td) < tonumber(bm) * 100 + tonumber(bd) then age = age - 1 end
+        if age < 2 then
+          infants = infants + 1
+        elseif age < 18 then
+          children = children + 1
+        else
+          adults = adults + 1
+        end
+      end
+      loyalty = loyalty + #(passenger.loyalty_programme_accounts or {})
+    end
+    outputs.adultCount, outputs.childCount, outputs.infantCount = adults, children, infants
+    outputs.loyaltyAccountCount = loyalty
+
+    local slices = {}
+    for _, slice in ipairs(order.slices or {}) do
+      local segment = (slice.segments or {})[1] or {}
+      table.insert(slices, {
+        id = slice.id,
+        origin = (slice.origin or {}).iata_code or "",
+        destination = (slice.destination or {}).iata_code or "",
+        departureDate = string.sub(segment.departing_at or "", 1, 10),
+        cabinClass = ((segment.passengers or {})[1] or {}).cabin_class or "",
+      })
+    end
+    outputs.slices = slices
+
+    local seats, bags = 0, 0
+    for _, service in ipairs(order.services or {}) do
+      if service.type == "seat" then seats = seats + 1 end
+      if service.type == "baggage" then bags = bags + 1 end
+    end
+    outputs.seatCount, outputs.bagCount = seats, bags
+
+    local metadata = type(order.metadata) == "table" and order.metadata or {}
+    outputs.metadataSource = text(metadata.source)
+    outputs.metadataReference = text(metadata.reference)
+    return outputs

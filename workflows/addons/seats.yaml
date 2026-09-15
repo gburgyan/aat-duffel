@@ -1,0 +1,11 @@
+execution:
+  steps:
+    - id: seats
+      node: getSeatMaps
+      description: A seat for each passenger on each flight, the first for sale with no disclosure
+      values:
+        offerId: {from: offer.offerId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: seatablePairCount >= 1 && availableSeatCount >= seatablePairCount

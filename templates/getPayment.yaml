@@ -1,0 +1,18 @@
+adapter: getPayment
+protocol: http
+
+request:
+  method: GET
+  path: /air/payments/{{paymentId}}
+
+response:
+  extract:
+    paymentId: data.id
+    amount: data.amount
+    currency: data.currency
+    paymentType:
+      path: data.type
+      default: ""
+    paymentStatus:
+      path: data.status
+      default: ""

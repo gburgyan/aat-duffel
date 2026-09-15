@@ -1,0 +1,17 @@
+# Two adults held without paying: the order is awaiting payment, with a payment deadline and a price
+# guarantee, at the priced total. Cleanup cancels the unpaid hold.
+kind: recipe
+metadata:
+  prompt: Hold an order for two adults without paying
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: Two adults, held unpaid
+  choices:
+    payment: Hold
+  layers: [party-couple]
+overrides:
+  assertions:
+    book:
+      - type: predicate
+        expr: passengerCount == 2 && adultCount == 2

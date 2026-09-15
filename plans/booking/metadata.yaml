@@ -1,0 +1,20 @@
+# An order's metadata: set at booking with a reference, replaced afterwards with PATCH (the only
+# update an order takes), and the order found again by its booking reference. Cleanup cancels it.
+kind: recipe
+metadata:
+  prompt: Book an order with a reference, update its metadata, and find it by booking reference
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: One adult, paid at once, with its metadata updated
+  choices:
+    payment: Pay Now
+  addons: [Update Metadata]
+  layers: [party-solo]
+overrides:
+  values:
+    book.reference: "booked-{{random 10}}"
+  assertions:
+    book:
+      - type: predicate
+        expr: 'metadataReference == "{{reference}}"'

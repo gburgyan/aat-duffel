@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Order</title>
+<style>
+  body {
+    margin: 0;
+    padding: 12px;
+    background: var(--color-bg, #0f1117);
+    color: var(--color-text, #e4e4e7);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    font-size: 13px;
+  }
+  h1 { margin: 0; font-size: 15px; }
+  h2 { margin: 16px 0 6px; font-size: 13px; font-weight: 600; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 8px; }
+  .muted { color: var(--color-text-secondary, #a1a1aa); }
+  .code { font-family: var(--font-mono, ui-monospace, monospace); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+  .chip { padding: 2px 8px; border: 1px solid var(--color-border, #2a2d3a); border-radius: 999px; font-size: 12px; white-space: nowrap; }
+  .ok { border-color: var(--color-success, #4ade80); color: var(--color-success, #4ade80); }
+  .warn { border-color: var(--color-warning, #fbbf24); color: var(--color-warning, #fbbf24); }
+  .bad { border-color: var(--color-danger, #f87171); color: var(--color-danger, #f87171); }
+  .totals { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 6px 0; }
+  .num { font-family: var(--font-mono, ui-monospace, monospace); white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 4px 8px 4px 0; text-align: left; vertical-align: top; }
+  th { border-bottom: 1px solid var(--color-border, #2a2d3a); color: var(--color-text-secondary, #a1a1aa); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid var(--color-border, #2a2d3a); }
+  .slice { border: 1px solid var(--color-border, #2a2d3a); border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: var(--color-surface, #171a23); }
+  .segment { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0; }
+  .seat { display: inline-block; padding: 0 6px; margin-right: 4px; border-radius: 4px; border: 1px solid var(--color-success, #4ade80); font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="root"><p class="muted">Waiting for data…</p></div>
+<script>
+(function () {
+  'use strict';
+
+  // Build nodes with textContent only: the body comes from the API under test.
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (key) {
+      if (key === 'text') {
+        node.textContent = attrs[key];
+      } else {
+        node.setAttribute(key, attrs[key]);
+      }
+    });
+    (children || []).forEach(function (child) {
+      if (child) node.appendChild(child);
+    });
+    return node;
+  }
+
+  function money(amount, currency) {
+    var value = parseFloat(amount);
+    if (isNaN(value)) return '';
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency }).format(value);
+    } catch (e) {
+      return value.toFixed(2) + ' ' + currency;
+    }
+  }
+
+  // Times as the API gives them, local to the airport: 2026-10-15T09:30:00 becomes 2026-10-15 09:30.
+  function localTime(iso) {
+    return (iso || '').replace('T', ' ').slice(0, 16);
+  }
+
+  function duration(iso) {
+    var m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?/.exec(iso || '');
+    if (!m) return '';
+    var hours = parseInt(m[1] || '0', 10) * 24 + parseInt(m[2] || '0', 10);
+    return (hours ? hours + 'h ' : '') + (m[3] ? parseInt(m[3], 10) + 'm' : '');
+  }
+
+  function chip(text, kind) {
+    return el('span', { 'class': 'chip' + (kind ? ' ' + kind : ''), text: text });
+  }
+
+  // Age on a date, as Duffel counts it for a passenger type.
+  function ageOn(bornOn, onDate) {
+    var b = /^(\d+)-(\d+)-(\d+)/.exec(bornOn || '');
+    var d = /^(\d+)-(\d+)-(\d+)/.exec(onDate || '');
+    if (!b || !d) return null;
+    var age = parseInt(d[1], 10) - parseInt(b[1], 10);
+    if (parseInt(d[2], 10) * 100 + parseInt(d[3], 10) < parseInt(b[2], 10) * 100 + parseInt(b[3], 10)) age--;
+    return age;
+  }
+
+  function render(body) {
+    var root = document.getElementById('root');
+    root.textContent = '';
+    var order = body && body.data;
+    if (!order || typeof order !== 'object' || Array.isArray(order)) {
+      root.appendChild(el('p', { 'class': 'muted', text: 'No order in this response.' }));
+      return;
+    }
+    var currency = order.total_currency;
+    var payment = order.payment_status || {};
+    var slices = order.slices || [];
+    var services = order.services || [];
+    var passengers = order.passengers || [];
+
+    var status = [];
+    status.push(chip(order.type === 'hold' ? 'hold' : 'instant'));
+    if (order.cancelled_at) {
+      status.push(chip('cancelled ' + localTime(order.cancelled_at), 'bad'));
+    } else if (payment.awaiting_payment) {
+      status.push(chip('awaiting payment by ' + localTime(payment.payment_required_by), 'warn'));
+      if (payment.price_guarantee_expires_at) status.push(chip('price held until ' + localTime(payment.price_guarantee_expires_at), 'warn'));
+    } else if (payment.paid_at) {
+      status.push(chip('paid ' + localTime(payment.paid_at), 'ok'));
+    }
+    if (order.live_mode === false) status.push(chip('test mode'));
+    root.appendChild(el('header', null, [
+      el('h1', { text: 'Order ' + (order.booking_reference || '') }),
+      el('span', { 'class': 'muted code', text: order.id || '' }),
+    ]));
+    root.appendChild(el('div', { 'class': 'chips' }, status));
+    root.appendChild(el('div', { 'class': 'totals' }, [
+      el('span', null, [el('span', { 'class': 'muted', text: 'Base ' }), el('span', { 'class': 'num', text: money(order.base_amount, order.base_currency || currency) })]),
+      el('span', null, [el('span', { 'class': 'muted', text: 'Tax ' }), el('span', { 'class': 'num', text: money(order.tax_amount, order.tax_currency || currency) })]),
+      el('span', null, [el('span', { 'class': 'muted', text: 'Total ' }), el('strong', { 'class': 'num', text: money(order.total_amount, currency) })]),
+    ]));
+
+    // Seats by segment and passenger, from the order's seat services.
+    var seatsBySegment = {};
+    services.forEach(function (service) {
+      if (service.type !== 'seat') return;
+      (service.segment_ids || []).forEach(function (segmentId) {
+        (seatsBySegment[segmentId] = seatsBySegment[segmentId] || []).push((service.metadata || {}).designator || 'seat');
+      });
+    });
+
+    root.appendChild(el('h2', { text: 'Itinerary' }));
+    slices.forEach(function (slice) {
+      var segments = slice.segments || [];
+      root.appendChild(el('div', { 'class': 'slice' }, [
+        el('div', null, [
+          el('strong', { text: ((slice.origin || {}).iata_code || '?') + ' → ' + ((slice.destination || {}).iata_code || '?') }),
+          el('span', { 'class': 'muted', text: '  ' + duration(slice.duration) + (segments.length > 1 ? ' · ' + (segments.length - 1) + ' connection' + (segments.length > 2 ? 's' : '') : '') }),
+        ]),
+      ].concat(segments.map(function (segment) {
+        var carrier = segment.marketing_carrier || {};
+        var cabin = ((segment.passengers || [])[0] || {});
+        return el('div', { 'class': 'segment' }, [
+          el('span', { 'class': 'code', text: (carrier.iata_code || '') + (segment.marketing_carrier_flight_number || '') }),
+          el('span', { text: ((segment.origin || {}).iata_code || '') + ' ' + localTime(segment.departing_at) + ' → ' + ((segment.destination || {}).iata_code || '') + ' ' + localTime(segment.arriving_at) }),
+          el('span', { 'class': 'muted', text: cabin.cabin_class_marketing_name || cabin.cabin_class || '' }),
+          el('span', null, (seatsBySegment[segment.id] || []).map(function (designator) { return el('span', { 'class': 'seat', text: designator }); })),
+        ]);
+      }))));
+    });
+
+    var lastSegment = ((slices[slices.length - 1] || {}).segments || [])[0] || {};
+    root.appendChild(el('h2', { text: 'Passengers' }));
+    var passengerRows = el('tbody');
+    passengers.forEach(function (p) {
+      var age = ageOn(p.born_on, lastSegment.departing_at);
+      var kind = age === null ? '' : (age < 2 ? 'infant' : (age < 18 ? 'child' : 'adult'));
+      var loyalty = (p.loyalty_programme_accounts || []).map(function (a) { return a.airline_iata_code + ' ' + a.account_number; }).join(', ');
+      passengerRows.appendChild(el('tr', null, [
+        el('td', { text: [p.title, p.given_name, p.family_name].filter(Boolean).join(' ') }),
+        el('td', { 'class': 'muted', text: kind + (age === null ? '' : ' (' + age + ')') }),
+        el('td', { 'class': 'code', text: p.born_on || '' }),
+        el('td', { text: loyalty }),
+      ]));
+    });
+    root.appendChild(el('table', null, [
+      el('thead', null, [el('tr', null, [el('th', { text: 'Name' }), el('th', { text: 'Type' }), el('th', { text: 'Born' }), el('th', { text: 'Loyalty' })])]),
+      passengerRows,
+    ]));
+
+    if (services.length) {
+      var names = {};
+      passengers.forEach(function (p) { names[p.id] = p.given_name || p.id; });
+      root.appendChild(el('h2', { text: 'Services' }));
+      var serviceRows = el('tbody');
+      services.forEach(function (service) {
+        var meta = service.metadata || {};
+        var detail = service.type === 'seat' ? (meta.designator || '') : [meta.type, meta.maximum_weight_kg ? meta.maximum_weight_kg + ' kg' : ''].filter(Boolean).join(' · ');
+        serviceRows.appendChild(el('tr', null, [
+          el('td', { text: service.type || '' }),
+          el('td', { text: detail }),
+          el('td', { text: (service.passenger_ids || []).map(function (id) { return names[id] || id; }).join(', ') }),
+          el('td', { 'class': 'num', text: service.quantity ? '× ' + service.quantity : '' }),
+          el('td', { 'class': 'num', text: money(service.total_amount, service.total_currency || currency) }),
+        ]));
+      });
+      root.appendChild(el('table', null, [
+        el('thead', null, [el('tr', null, [el('th', { text: 'Service' }), el('th', { text: 'Detail' }), el('th', { text: 'Passenger' }), el('th', { text: 'Qty' }), el('th', { 'class': 'num', text: 'Price' })])]),
+        serviceRows,
+      ]));
+    }
+
+    var changes = order.changes || [];
+    if (changes.length) {
+      root.appendChild(el('h2', { text: 'Changes' }));
+      changes.forEach(function (change) {
+        var added = ((change.slices || {}).add || []).map(function (s) { return ((s.origin || {}).iata_code || '?') + ' → ' + ((s.destination || {}).iata_code || '?') + ' ' + localTime(((s.segments || [])[0] || {}).departing_at); });
+        root.appendChild(el('div', { 'class': 'segment' }, [
+          el('span', { text: added.join(', ') || 'change' }),
+          el('span', { 'class': 'num', text: money(change.change_total_amount, change.change_total_currency || currency) }),
+          el('span', { 'class': 'muted', text: change.confirmed_at ? 'confirmed ' + localTime(change.confirmed_at) : 'not confirmed' }),
+        ]));
+      });
+    }
+
+    var cancellation = order.cancellation;
+    if (cancellation) {
+      root.appendChild(el('h2', { text: 'Cancellation' }));
+      root.appendChild(el('div', { 'class': 'segment' }, [
+        el('span', { text: 'Refund ' }),
+        el('strong', { 'class': 'num', text: money(cancellation.refund_amount, cancellation.refund_currency || currency) }),
+        el('span', { 'class': 'muted', text: 'to ' + (cancellation.refund_to || '?') }),
+        el('span', { 'class': 'muted', text: cancellation.confirmed_at ? 'confirmed ' + localTime(cancellation.confirmed_at) : 'quoted' }),
+      ]));
+    }
+
+    var extras = [];
+    (order.available_actions || []).forEach(function (action) { extras.push(chip(action)); });
+    if ((order.airline_initiated_changes || []).length) extras.push(chip((order.airline_initiated_changes || []).length + ' airline-initiated change(s)', 'warn'));
+    Object.keys(order.metadata || {}).forEach(function (key) { extras.push(chip(key + ': ' + order.metadata[key])); });
+    if ((order.users || []).length) extras.push(chip((order.users || []).length + ' customer user(s)'));
+    if (extras.length) {
+      root.appendChild(el('h2', { text: 'Actions and metadata' }));
+      root.appendChild(el('div', { 'class': 'chips' }, extras));
+    }
+  }
+
+  window.addEventListener('message', function (event) {
+    var msg = event.data;
+    if (!msg || msg.type !== 'aat-visualizer-data') return;
+    Object.keys(msg.theme || {}).forEach(function (name) {
+      document.documentElement.style.setProperty(name, msg.theme[name]);
+    });
+    render(msg.body);
+    requestAnimationFrame(function () {
+      parent.postMessage({ type: 'aat-visualizer-resize', height: document.documentElement.scrollHeight }, '*');
+    });
+  });
+
+  parent.postMessage({ type: 'aat-visualizer-ready' }, '*');
+})();
+</script>
+</body>
+</html>

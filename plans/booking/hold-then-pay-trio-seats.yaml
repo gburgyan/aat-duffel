@@ -1,0 +1,19 @@
+# An adult with a child and an infant, held with seats, then paid at the held total: the held total
+# includes the seats priced, one payment settles it, and the paid order's total is unchanged. Cleanup
+# cancels the order.
+kind: recipe
+metadata:
+  prompt: Hold an order for a parent, a child, and an infant with seats, then pay it
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: An adult, a child, and an infant, with seats, held and then paid
+  choices:
+    payment: Hold Then Pay
+  addons: [Seats]
+  layers: [party-trio]
+overrides:
+  assertions:
+    book:
+      - type: predicate
+        expr: passengerCount == 3 && adultCount == 1 && childCount == 1 && infantCount == 1 && seatCount >= 2

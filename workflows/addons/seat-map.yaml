@@ -4,7 +4,7 @@ execution:
       node: getSeatMaps
       description: One seat map per segment, and the seats for sale to each passenger
       values:
-        offerId: AUTOWIRE
+        offerId: {from: offer.offerId}
       assertions:
         mechanical:
           - type: predicate

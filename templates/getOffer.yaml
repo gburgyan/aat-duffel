@@ -73,3 +73,68 @@ response:
     checkedBagAmount:
       path: 'data.available_services.#(metadata.type=="checked").total_amount'
       default: ""
+  # Passenger details for createOrder. Duffel checks each birth date against the age searched, as of the
+  # last slice's departure, so each birthday falls six months from that date. The first adult is Amelia
+  # Earhart, the name on Duffel's test loyalty account. An order links each infant to one adult, so an
+  # adult who carries an infant goes in infantCarers with the infant's ID.
+  transform: |
+    local function cents(amount)
+      local sign, whole, frac = string.match(amount or "", "^(%-?)(%d+)%.?(%d*)$")
+      if not whole then return 0 end
+      local value = tonumber(whole) * 100 + tonumber((frac .. "00"):sub(1, 2))
+      if sign == "-" then value = -value end
+      return value
+    end
+    outputs.totalAmountCents = cents(json_path("data.total_amount"))
+
+    local slices = json_path("data.slices") or {}
+    local segment = ((slices[#slices] or {}).segments or {})[1] or {}
+    local y, m, d = string.match(segment.departing_at or "", "^(%d+)-(%d+)-(%d+)")
+    y, m, d = tonumber(y) or 2030, tonumber(m) or 6, tonumber(d) or 15
+    local names = {
+      adult = {{"Amelia", "Earhart", "ms", "f"}, {"Charles", "Lindbergh", "mr", "m"}, {"Bessie", "Coleman", "ms", "f"}, {"Wiley", "Post", "mr", "m"}},
+      child = {{"Maya", "Earhart", "miss", "f"}, {"Leo", "Lindbergh", "mr", "m"}},
+      infant = {{"Ada", "Earhart", "miss", "f"}, {"Max", "Lindbergh", "mr", "m"}},
+    }
+    local used = {adult = 0, child = 0, infant = 0}
+    local adults, others, infants = {}, {}, {}
+    for _, p in ipairs(json_path("data.passengers") or {}) do
+      local age = p.age or 35
+      local kind = "adult"
+      if string.find(p.type or "", "infant", 1, true) or age < 2 then
+        kind = "infant"
+      elseif p.type == "child" or age < 18 then
+        kind = "child"
+      end
+      used[kind] = used[kind] + 1
+      local pick = names[kind][(used[kind] - 1) % #names[kind] + 1]
+      local by, bm = y - age, m - 6
+      if bm <= 0 then bm, by = bm + 12, by - 1 end
+      local passenger = {
+        id = p.id, type = kind, age = age,
+        givenName = pick[1], familyName = pick[2], title = pick[3], gender = pick[4],
+        bornOn = string.format("%04d-%02d-%02d", by, bm, math.min(d, 28)),
+      }
+      if kind == "adult" then
+        table.insert(adults, passenger)
+      elseif kind == "infant" then
+        table.insert(infants, passenger)
+      else
+        table.insert(others, passenger)
+      end
+    end
+
+    local booking, carers = {}, {}
+    for i, adult in ipairs(adults) do
+      if infants[i] then
+        adult.infantPassengerId = infants[i].id
+        table.insert(carers, adult)
+      else
+        table.insert(booking, adult)
+      end
+    end
+    for _, p in ipairs(others) do table.insert(booking, p) end
+    for _, p in ipairs(infants) do table.insert(booking, p) end
+    outputs.bookingPassengers = booking
+    if #carers > 0 then outputs.infantCarers = carers end
+    return outputs

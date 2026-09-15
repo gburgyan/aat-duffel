@@ -1,0 +1,22 @@
+adapter: updateOrder
+protocol: http
+
+request:
+  method: PATCH
+  path: /air/orders/{{orderId}}
+  headers:
+    Content-Type: application/json
+  # The source tag is sent again with the new reference, so the order stays this package's whatever
+  # Duffel does with the metadata it replaces.
+  body: |
+    {"data": {"metadata": {"source": "aat-duffel", "reference": "{{reference}}"}}}
+
+response:
+  extract:
+    orderId: data.id
+    metadataSource:
+      path: data.metadata.source
+      default: ""
+    metadataReference:
+      path: data.metadata.reference
+      default: ""

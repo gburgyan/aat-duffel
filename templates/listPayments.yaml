@@ -1,0 +1,18 @@
+adapter: listPayments
+protocol: http
+
+request:
+  method: GET
+  path: /air/payments?order_id={{orderId}}
+
+response:
+  extract:
+    paymentCount: 'data.#'
+    payments:
+      path: data
+      fields:
+        id: id
+        amount: amount
+        currency: currency
+        type: type
+        status: status

@@ -1,0 +1,65 @@
+execution:
+  steps:
+    - id: book
+      node: createOrder
+      isGoal: true
+      description: Hold the offer unpaid, at the priced total
+      values:
+        orderType: hold
+        offerId: AUTOWIRE
+        bookingPassengers: AUTOWIRE
+        infantCarers: AUTOWIRE?
+        userId: AUTOWIRE?
+        services: {from: price.intendedServices}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              liveMode == false && orderType == "hold" && awaitingPayment == true && paymentRequiredBy != "" &&
+              totalAmount == "{{price.totalAmount}}" && serviceCount == "{{price.intendedServiceCount}}"
+
+    - id: pay
+      node: createPayment
+      dependsOn: [book]
+      description: Pay the held order from the balance, at the total it was held for
+      values:
+        orderId: {from: book.orderId}
+        amount: {from: book.totalAmount}
+        currency: {from: book.totalCurrency}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'paymentStatus == "succeeded" && paymentType == "balance" && amount == "{{amount}}"'
+
+    - id: payments
+      node: listPayments
+      dependsOn: [pay]
+      description: The order's one payment
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: paymentCount == 1
+
+    - id: payment
+      node: getPayment
+      dependsOn: [payments]
+      description: The payment read back by its ID
+      values:
+        paymentId: {from: pay.paymentId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'paymentStatus == "succeeded" && amount == "{{pay.amount}}"'
+
+    - id: paid
+      node: getOrder
+      dependsOn: [payment]
+      description: The order read again, paid, at the total it was held for
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'awaitingPayment == false && paidAt != "" && totalAmount == "{{book.totalAmount}}"'

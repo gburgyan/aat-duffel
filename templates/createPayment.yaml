@@ -1,0 +1,22 @@
+adapter: createPayment
+protocol: http
+
+request:
+  method: POST
+  path: /air/payments
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"order_id": "{{orderId}}", "payment": {"type": "balance", "amount": "{{amount}}", "currency": "{{currency}}"}}}
+
+response:
+  extract:
+    paymentId: data.id
+    amount: data.amount
+    currency: data.currency
+    paymentType:
+      path: data.type
+      default: ""
+    paymentStatus:
+      path: data.status
+      default: ""

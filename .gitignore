@@ -3,6 +3,9 @@ _output/
 state.json
 .aat-overrides.yaml
 
+# One-off probe plans that check the live API before a plan is written
+probes/
+
 # Credentials never belong in the repository
 setup-*.sh
 env.secrets*.yaml

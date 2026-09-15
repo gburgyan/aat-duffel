@@ -1,0 +1,19 @@
+# One adult with Duffel's test loyalty account (Amelia Earhart, Duffel Airways, 1234567890) attached to
+# the offer's passenger before booking. The offer is read again at the member price, 10% off, and the
+# order books at that price, below the offer's first read, with the account on it. Cleanup cancels it.
+kind: recipe
+metadata:
+  prompt: Book one adult with the test loyalty account at the member price
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: One adult, paid at once, at the loyalty member price
+  choices:
+    payment: Pay Now
+  addons: [Loyalty Account]
+  layers: [party-solo]
+overrides:
+  assertions:
+    book:
+      - type: predicate
+        expr: 'loyaltyAccountCount == 1 && adultCount == 1 && totalAmountCents < "{{offer.totalAmountCents}}"'

@@ -1,0 +1,6 @@
+name: party-couple
+description: Two adults
+selectionHint: Two travellers booked together
+inputs:
+  createOfferRequest.passengerAges:
+    value: [35, 33]

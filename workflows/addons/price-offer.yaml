@@ -4,7 +4,7 @@ execution:
       node: priceOffer
       description: The offer priced for a balance payment, which adds no surcharge
       values:
-        offerId: AUTOWIRE
+        offerId: {from: offer.offerId}
       assertions:
         mechanical:
           - type: predicate

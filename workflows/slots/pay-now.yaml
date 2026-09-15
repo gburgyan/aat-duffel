@@ -1,0 +1,22 @@
+execution:
+  steps:
+    - id: book
+      node: createOrder
+      isGoal: true
+      description: Book the offer and pay the priced total from the balance
+      values:
+        orderType: instant
+        offerId: AUTOWIRE
+        bookingPassengers: AUTOWIRE
+        infantCarers: AUTOWIRE?
+        userId: AUTOWIRE?
+        services: {from: price.intendedServices}
+        amount: {from: price.totalAmount}
+        currency: {from: price.totalCurrency}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              liveMode == false && orderType == "instant" && awaitingPayment == false && paidAt != "" &&
+              totalAmount == "{{amount}}" && serviceCount == "{{price.intendedServiceCount}}" &&
+              metadataSource == "aat-duffel" && availableActions == "cancel,change,update"

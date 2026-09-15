@@ -1,0 +1,6 @@
+name: party-trio
+description: One adult, a child, and an infant on the adult's lap
+selectionHint: A parent travelling with a child and an infant
+inputs:
+  createOfferRequest.passengerAges:
+    value: [35, 8, 1]

@@ -1,0 +1,39 @@
+adapter: listOrders
+protocol: http
+
+request:
+  method: GET
+  path: /air/orders?limit={{limit}}{{?after}}&after={{after}}{{/after}}{{?offerId}}&offer_id={{offerId}}{{/offerId}}{{?bookingReference}}&booking_reference={{bookingReference}}{{/bookingReference}}{{?userId}}&user_id={{userId}}{{/userId}}{{?awaitingPayment}}&awaiting_payment={{awaitingPayment}}{{/awaitingPayment}}
+
+response:
+  extract:
+    orderCount: 'data.#'
+    nextCursor:
+      path: meta.after
+      default: ""
+  # Orders this package books carry metadata.source "aat-duffel". A page counts those, and the ones of
+  # them not cancelled, which it also lists so a guard that fails can name them. Active orders from any
+  # other source, such as earlier projects on the same account, are counted apart.
+  transform: |
+    local ours, ourActive, otherActive, liveMode = 0, 0, 0, 0
+    local active = {}
+    for _, order in ipairs(json_path("data") or {}) do
+      local isOurs = type(order.metadata) == "table" and order.metadata.source == "aat-duffel"
+      local isActive = order.cancelled_at == nil
+      if order.live_mode == true then liveMode = liveMode + 1 end
+      if isOurs then
+        ours = ours + 1
+        if isActive then
+          ourActive = ourActive + 1
+          table.insert(active, {id = order.id, bookingReference = order.booking_reference, createdAt = order.created_at})
+        end
+      elseif isActive then
+        otherActive = otherActive + 1
+      end
+    end
+    outputs.ourOrderCount = ours
+    outputs.ourActiveOrderCount = ourActive
+    if #active > 0 then outputs.ourActiveOrders = active end
+    outputs.otherActiveOrderCount = otherActive
+    outputs.liveModeOrderCount = liveMode
+    return outputs

@@ -1,0 +1,25 @@
+# Every order in the account, a page at a time: none this package booked is left active. Each order it
+# books is cancelled by cleanup, so an active one means a cleanup didn't run. Orders from other sources,
+# such as earlier projects on the same account, are counted apart and never fail the guard. The name
+# sorts it last in a batch; run the batch sequentially, since a parallel one can still be booking when
+# this reads.
+intent:
+  goal: orders
+  description: No order this package booked is left active, across every page of the account's orders
+
+execution:
+  steps:
+    - id: orders
+      node: listOrders
+      isGoal: true
+      description: Every page of orders, counted by source and state
+      values:
+        limit: 200
+      repeat:
+        next: {after: nextCursor}
+        collect: [orderCount, ourOrderCount, ourActiveOrderCount, ourActiveOrders, otherActiveOrderCount, liveModeOrderCount]
+        max: 100
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: orderCount > 0 && ourOrderCount > 0 && ourActiveOrderCount == 0 && liveModeOrderCount == 0

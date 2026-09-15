@@ -10,10 +10,15 @@ response:
     seatMapCount: 'data.#'
   # Seats sit four levels down (maps, cabins, rows, sections, elements), and a seat is sold separately
   # to each passenger, so flatten them into one entry per seat per passenger that a selection can
-  # filter by passengerId, segmentId, and restricted.
+  # filter by passengerId, segmentId, and restricted. seatServices picks the seats an order buys: for
+  # each passenger on each segment, the first seat for sale with no disclosure that no one else on the
+  # segment has, left out when there are none.
   transform: |
     local seats, restricted = {}, 0
+    local picks, picked, taken, seatable, seatablePairs = {}, {}, {}, {}, 0
     for _, map in ipairs(json_path("data") or {}) do
+      local segment = map.segment_id or ""
+      taken[segment] = taken[segment] or {}
       for _, cabin in ipairs(map.cabins or {}) do
         for _, row in ipairs(cabin.rows or {}) do
           for _, section in ipairs(row.sections or {}) do
@@ -31,6 +36,23 @@ response:
                     restricted = isRestricted,
                   })
                   if isRestricted then restricted = restricted + 1 end
+
+                  local pair = segment .. "/" .. (service.passenger_id or "")
+                  if not seatable[pair] then
+                    seatable[pair] = true
+                    seatablePairs = seatablePairs + 1
+                  end
+                  if not isRestricted and not picked[pair] and not taken[segment][element.designator] then
+                    picked[pair] = true
+                    taken[segment][element.designator] = true
+                    table.insert(picks, {
+                      id = service.id,
+                      designator = element.designator,
+                      passengerId = service.passenger_id,
+                      segmentId = map.segment_id,
+                      amount = service.total_amount,
+                    })
+                  end
                 end
               end
             end
@@ -41,4 +63,6 @@ response:
     outputs.seats = seats
     outputs.availableSeatCount = #seats
     outputs.restrictedSeatCount = restricted
+    if #picks > 0 then outputs.seatServices = picks end
+    outputs.seatablePairCount = seatablePairs
     return outputs

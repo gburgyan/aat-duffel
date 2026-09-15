@@ -1,0 +1,21 @@
+# Two adults, a child, and an infant booked at once, with a seat for everyone who takes one and an extra
+# checked bag for each passenger. The infant flies on an adult's lap, so the order links it to that
+# adult and gives it no seat. The order books exactly the services priced. Cleanup cancels it.
+kind: recipe
+metadata:
+  prompt: Book a family of four with an infant, with seats and bags, and pay at once
+  graphVersion: "1.0.0"
+selection:
+  workflow: Book Flight
+  description: Two adults, a child, and an infant, with seats and checked bags
+  choices:
+    payment: Pay Now
+  addons: [Seats, Checked Bags]
+  layers: [party-family]
+overrides:
+  assertions:
+    book:
+      - type: predicate
+        expr: >-
+          passengerCount == 4 && adultCount == 2 && childCount == 1 && infantCount == 1 &&
+          seatCount >= 3 && bagCount >= 3

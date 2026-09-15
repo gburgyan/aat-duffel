@@ -5,8 +5,9 @@ graph describes each endpoint, workflows chain the endpoints, and plans prove wh
 against Duffel's live test API. What this README says about Duffel comes from those runs. It says so where a run showed
 something that no plan asserts yet, and it names Duffel's docs where they're the source.
 
-**Status:** places, reference data, flight search, and offers are done: 22 endpoints, all run by 17 plans. Booking
-comes next ([what's not covered yet](#not-covered-yet)).
+**Status:** places, reference data, search, offers, and booking are done: 32 endpoints, all run by 27 plans that pass
+together in about 95 seconds. Changes, cancellations, and the account features come next
+([what's not covered yet](#not-covered-yet)).
 
 ```text
 $ aat run plan search/one-way
@@ -37,8 +38,9 @@ latest` shows the run:
 ### What you need
 
 - **AAT built from `main`.** The package uses features that aren't in v0.1.0: lists in step values, extract
-  `default:`, header extraction, `repeat`, visualizer `bodyPath`, and nested blocks of the same key. Building from
-  source needs Go 1.25.7 or later, and Node.js for the web UI:
+  `default:`, header extraction, `repeat`, visualizer `bodyPath`, nested blocks of the same key, `repeat.next` paging,
+  and assertions that read an earlier step's output. The last two are open as gburgyan/aat#19 and #20 until they merge.
+  Building from source needs Go 1.25.7 or later, and Node.js for the web UI:
 
   ```bash
   git clone https://github.com/gburgyan/aat.git
@@ -53,15 +55,17 @@ latest` shows the run:
   export DUFFEL_ACCESS_TOKEN=duffel_test_...
   ```
 
-Nothing in the package books yet. Searches check that `live_mode` is false, so a live token stops a plan at its first
-search.
+Searches check that `live_mode` is false before anything is booked, so a live token stops a plan at its first search.
+Every order a plan books carries `metadata.source: aat-duffel` and is cancelled in cleanup, and the last plan in a
+batch checks that none is left.
 
 ### Run it
 
 ```bash
 aat validate --strict            # check every file, template, workflow, and plan; no requests sent
 aat run plan search/one-way      # the run above
-aat run batch                    # all 17 plans, about 40 seconds
+aat run plan booking/instant-family-seats-bags   # book a family of four with seats and bags, then cancel it
+aat run batch                    # all 27 plans, about 95 seconds; sequential, so the order guard runs last
 aat run batch scenarios          # only Duffel's test routes
 aat web view latest              # open the last run in the browser
 ```
@@ -88,6 +92,7 @@ from [`visualizers/`](visualizers/):
 | **Offers** | `listOffers` | Every offer on the page, cheapest first: airline, journey, stops and duration, cabin and fare brand, whether it can be held, and the total. The airline chips show how many offers each airline sent, and Duffel Airways rows are highlighted. |
 | **Seat map** | any response shaped like a seat map | Each segment's cabin, row by row: seats for sale, seats for sale with a disclosure such as "Passenger must be an adult", seats not for sale, exits, and facilities |
 | **Offers in this batch** | a batch search's read | The offers that read brought, and how many batches are left |
+| **Order** | any response with a booking reference | The order's state (paid, awaiting payment by its deadline, or cancelled) and totals, the itinerary with each flight's cabin and seats, passengers with their type and loyalty accounts, services, changes, the cancellation's refund, and the actions the order allows |
 
 Run `aat run plan search/one-way` and open it. The `offers` step lists what the search found. With direct flights
 only, this run found 73 offers from 7 airlines:
@@ -103,6 +108,10 @@ no batches remain. Its tab draws the last read, and `aat run show latest --step 
 and why it stopped, as in `3 requests (stopped: until)`:
 
 ![The Offers in this batch tab on a batch search read, with the batches left](docs/images/batch-offers.png)
+
+A booking step gets an Order tab. Run `aat run plan booking/instant-family-seats-bags` and pick the `book` step:
+
+![The Order tab: a family of four with an infant, their seats on the flight, and the seats and bags bought](docs/images/order.png)
 
 The visualizers are plain HTML files that receive the response body from the web UI. Matching is declared in
 [`visualizers/visualizers.yaml`](visualizers/visualizers.yaml). Every Duffel response is wrapped in `{"data": …}`, so
@@ -186,12 +195,83 @@ sequenceDiagram
         expr: zzOfferCount >= 1 && offerCount > zzOfferCount
 ```
 
+Booking plans reuse [Book Flight](workflows/book-flight.yaml). Its `payment` slot picks how the order is paid, addons
+add seats, bags, a loyalty account, or a metadata update, and [party layers](layers/) set the passengers. The priced
+services go into the order as they are, so an instant order pays exactly the priced total:
+
+```mermaid
+flowchart LR
+  search["<b>search</b><br>createOfferRequest"] --> offers["<b>offers</b><br>listOffers"] --> offer["<b>offer</b><br>getOffer"]
+  offer -.-> seats["<b>Seats</b><br>getSeatMaps"]
+  offer -.-> bags["<b>Checked Bags</b><br>getOfferBags"]
+  offer -.-> loyalty["<b>Loyalty Account</b><br>updateOfferPassenger"]
+  offer --> price["<b>price</b><br>priceOffer"]
+  seats -.-> price
+  bags -.-> price
+  price --> slot{"payment slot"}
+  slot -- "Pay Now" --> instant["<b>book</b><br>createOrder, instant"]
+  slot -- "Hold" --> hold["<b>book</b><br>createOrder, hold"]
+  slot -- "Hold Then Pay" --> later["<b>book</b>, then <b>pay</b>,<br><b>payments</b>, <b>payment</b>, <b>paid</b>"]
+```
+
+Here is the whole of the family booking:
+
+```yaml
+kind: recipe
+selection:
+  workflow: Book Flight
+  choices:
+    payment: Pay Now
+  addons: [Seats, Checked Bags]
+  layers: [party-family]
+overrides:
+  assertions:
+    book:
+      - type: predicate
+        expr: >-
+          passengerCount == 4 && adultCount == 2 && childCount == 1 && infantCount == 1 &&
+          seatCount >= 3 && bagCount >= 3
+```
+
+Every order is cancelled when its plan ends. `createOrder`'s cleanup quotes a cancellation, and that quote's cleanup
+confirms it:
+
+```yaml
+createOrder:
+  cleanup:
+    node: createOrderCancellation
+    when: cancellable == true
+createOrderCancellation:
+  cleanup: confirmOrderCancellation
+```
+
+`aat run show <batch>` sums up what cleanup did. The last full batch cancelled 6 orders with 0 cleanup failures. Then
+[`zz-no-live-orders`](plans/zz-no-live-orders.yaml), which sorts last, reads every page of the account's orders and
+fails if one of the package's orders is still active:
+
+```yaml
+- id: orders
+  node: listOrders
+  values:
+    limit: 200
+  repeat:
+    next: {after: nextCursor}
+    collect: [orderCount, ourOrderCount, ourActiveOrderCount, ourActiveOrders, otherActiveOrderCount, liveModeOrderCount]
+    max: 100
+  assertions:
+    mechanical:
+      - type: predicate
+        expr: orderCount > 0 && ourOrderCount > 0 && ourActiveOrderCount == 0 && liveModeOrderCount == 0
+```
+
+Orders from other sources on the same account are counted apart and never fail it.
+
 ## What's exercised
 
 ### Endpoints
 
 Each endpoint is a node in [`graph.yaml`](graph.yaml), with a template in [`templates/`](templates/). Every node runs in
-at least one plan.
+at least one plan, the cancellation nodes in cleanup.
 
 | Endpoint | Node | Run by |
 |---|---|---|
@@ -205,11 +285,17 @@ at least one plan.
 | `GET /air/offer_requests/{id}`, `GET /air/offer_requests` | `getOfferRequest`, `listOfferRequests` | [offer-requests](plans/search/offer-requests.yaml) |
 | `GET /air/offers` | `listOffers` | Find Offer, [no-offers](plans/scenarios/no-offers.yaml), [offer-gone](plans/scenarios/offer-gone.yaml) |
 | `GET /air/offers/{id}` | `getOffer` | Find Offer, [batch](plans/search/batch.yaml), [offer-gone](plans/scenarios/offer-gone.yaml) |
-| `POST /air/offers/{id}/actions/price` | `priceOffer` | [one-way](plans/search/one-way.yaml) |
-| `GET /air/seat_maps` | `getSeatMaps` | [one-way](plans/search/one-way.yaml) |
+| `POST /air/offers/{id}/actions/price` | `priceOffer` | [one-way](plans/search/one-way.yaml), Book Flight |
+| `GET /air/seat_maps` | `getSeatMaps` | [one-way](plans/search/one-way.yaml), [instant-family-seats-bags](plans/booking/instant-family-seats-bags.yaml), [hold-then-pay-trio-seats](plans/booking/hold-then-pay-trio-seats.yaml) |
+| `GET /air/offers/{id}?return_available_services=true` | `getOfferBags` | [instant-family-seats-bags](plans/booking/instant-family-seats-bags.yaml) |
 | `PATCH /air/offers/{offer_id}/passengers/{id}` | `updateOfferPassenger` | [loyalty](plans/search/loyalty.yaml) |
 | `POST /air/offers/{id}/upsell_offers` | `listUpsellOffers` | [upsell](plans/search/upsell.yaml) |
 | `POST /air/batch_offer_requests`, `GET /air/batch_offer_requests/{id}` | `createBatchOfferRequest`, `getBatchOfferRequest` | [batch](plans/search/batch.yaml) |
+| `POST /air/orders` | `createOrder` | Book Flight: the [booking plans](plans/booking/) and the order-side scenarios |
+| `GET /air/orders/{id}`, `PATCH /air/orders/{id}` | `getOrder`, `updateOrder` | Book Flight, [metadata](plans/booking/metadata.yaml) |
+| `GET /air/orders` | `listOrders` | [zz-no-live-orders](plans/zz-no-live-orders.yaml), [metadata](plans/booking/metadata.yaml), the order-side scenarios |
+| `POST /air/payments`, `GET /air/payments`, `GET /air/payments/{id}` | `createPayment`, `listPayments`, `getPayment` | [hold-then-pay-trio-seats](plans/booking/hold-then-pay-trio-seats.yaml) |
+| `POST /air/order_cancellations`, `POST /air/order_cancellations/{id}/actions/confirm` | `createOrderCancellation`, `confirmOrderCancellation` | cleanup, after every booking |
 
 ### Plans
 
@@ -224,6 +310,13 @@ at least one plan.
 | [search/loyalty](plans/search/loyalty.yaml) | Duffel's test loyalty account attached to the offer's passenger, and still on the offer when it's read again |
 | [search/upsell](plans/search/upsell.yaml) | Duffel Airways refuses upsell offers: 422 `unsupported_action`, an `airline_error` |
 | [search/batch](plans/search/batch.yaml) | A batch search polled until no batches remain, with the Duffel Airways offers collected on the way |
+| [booking/instant-solo](plans/booking/instant-solo.yaml) | One adult booked and paid at once, at exactly the priced total. The order carries the package's tag and allows cancel, change, and update. |
+| [booking/instant-family-seats-bags](plans/booking/instant-family-seats-bags.yaml) | Two adults, a child, and an infant on a lap, with seats and extra bags. The order books exactly the services priced (in one run, 3 seats and 4 bags) and counts each passenger type. |
+| [booking/hold-couple](plans/booking/hold-couple.yaml) | Two adults held unpaid at the priced total, with a payment deadline and a price guarantee |
+| [booking/hold-then-pay-trio-seats](plans/booking/hold-then-pay-trio-seats.yaml) | An adult, a child, and an infant held with seats, then paid at the held total. The payment reads back, and the paid order's total is unchanged. |
+| [booking/loyalty-member](plans/booking/loyalty-member.yaml) | The test loyalty account attached before booking: the order books below the offer's first price and keeps the account |
+| [booking/metadata](plans/booking/metadata.yaml) | A reference stored at booking, replaced with PATCH, and the order found again by its booking reference |
+| [zz-no-live-orders](plans/zz-no-live-orders.yaml) | Every page of the account's orders, read with `repeat.next`: none of the package's orders is still active |
 
 ### Duffel's test routes
 
@@ -241,6 +334,9 @@ one.
 | BTS → ABV | no extra services | [no-services](plans/scenarios/no-services.yaml): nothing for sale, though the fare still includes bags |
 | STN → LHR | a search that times out | [search-timeout](plans/scenarios/search-timeout.yaml): 504 `gateway_timeout_error`, an `api_error` |
 | LGW → LHR | an offer gone by the time it's read | [offer-gone](plans/scenarios/offer-gone.yaml): 422 `offer_no_longer_available` |
+| LHR → LGW | an order the airline fails | [order-creation-error](plans/scenarios/order-creation-error.yaml): 502 `airline_unknown`, an `airline_error`, and no order |
+| LGW → STN | a balance too low to pay | [insufficient-balance](plans/scenarios/insufficient-balance.yaml): 422 `insufficient_balance`, an `invalid_state_error`, and no order |
+| LHR → STN | a price that rises with every read | [price-changed-at-booking](plans/scenarios/price-changed-at-booking.yaml): the second read costs more, and paying the first read's total is 422 `payment_amount_does_not_match_order_amount`, with no order |
 
 ## What Duffel does in test mode
 
@@ -259,7 +355,8 @@ find them.
   20.00. Its economy cabin has 192 seats, 76 of them for sale at 20.00.
 - **No upsells.** Duffel Airways answers the upsell action with 422 `unsupported_action`.
 - **The test loyalty account takes 10% off.** With Amelia Earhart's Duffel Airways account (1234567890) on the
-  passenger, 227.33 became 204.60: the two totals in the loyalty plan's output.
+  passenger, 227.33 became 204.60: the two totals in the loyalty plan's output. An order booked afterwards pays the
+  member price and keeps the account.
 - **Batch searches arrive a supplier at a time.** `remaining_batches` falls unevenly (6, 2, 1, 0 in one run), each
   read returns only the new offers, and Duffel Airways came in the first batch. A batch search expires a minute
   after it starts.
@@ -267,17 +364,31 @@ find them.
   except on purpose.
 - **Lists page with cursors.** `meta.after` is `null` on the last page. Every response carries lowercase
   `ratelimit-*` headers (4000 requests a minute) and an `x-request-id`.
-- **One test route isn't asserted yet.** On LHR → STN, every read of the offer costs 10.00 more. Runs show it, but
-  asserting it needs a plan that compares an output with an earlier step's.
+- **Booking takes the priced total exactly.** An instant order pays from the balance at the price action's total,
+  services included, and books exactly the services priced: 20.00 for each Duffel Airways seat and each extra 23 kg
+  bag.
+- **Birth dates must fit the ages searched.** Duffel checks each one as of the last flight's departure. An infant is
+  booked by naming it on an adult as `infant_passenger_id`, and takes no seat. The order's passengers echo neither
+  that link nor a passenger type.
+- **Holds are due in 72 hours.** A held order's payment deadline is the search's creation time plus 72 hours, and its
+  price is guaranteed for 48. Seats and bags can be held too, and paying at the held total leaves the total
+  unchanged.
+- **Metadata is the only thing an order update changes.** PATCH replaces it, and the `booking_reference` and
+  `offer_id` list filters find the order again.
+- **Refused orders leave nothing behind.** On each order-side test route, listing orders by the offer finds none.
 
 ## AAT features on display
 
 | Feature | In this package |
 |---|---|
-| Workflows, addons, and recipes | [Find Offer](workflows/find-offer.yaml) and four [addons](workflows/addons/). Eight plans are short recipes that reuse them. |
+| Workflows, addons, and recipes | [Find Offer](workflows/find-offer.yaml), [Book Flight](workflows/book-flight.yaml), and their [addons](workflows/addons/). Most plans are short recipes that reuse them. |
+| Slots and layers | Book Flight's `payment` slot picks Pay Now, Hold, or Hold Then Pay, and [party layers](layers/) set one to four passengers |
+| Cleanup chains | `createOrder` → `createOrderCancellation` → `confirmOrderCancellation`, with `when: cancellable == true`, and `aat run show <batch>` sums up every cleanup |
+| Paging with `repeat.next` | [`zz-no-live-orders`](plans/zz-no-live-orders.yaml) reads every page of the account's orders, and fails if a listing is cut off |
+| Assertions across steps | `serviceCount == "{{price.intendedServiceCount}}"` in the Pay Now slot, and `totalAmount > "{{offer.totalAmount}}"` on the price change route |
 | Selection by filter | `select: {strategy: match, field: id, filter: ownerCode == "ZZ"}` picks the offer in Find Offer |
 | Repeating a read until a condition holds | [`search/batch`](plans/search/batch.yaml): `repeat` with `until`, `collect`, `interval`, `max`, and `timeout` |
-| Expected failures, checked by error code | [`search-timeout`](plans/scenarios/search-timeout.yaml), [`offer-gone`](plans/scenarios/offer-gone.yaml), and [Upsell Refused](workflows/addons/upsell-refused.yaml) |
+| Expected failures, checked by error code | [`search-timeout`](plans/scenarios/search-timeout.yaml), [`offer-gone`](plans/scenarios/offer-gone.yaml), the three order-side routes, and [Upsell Refused](workflows/addons/upsell-refused.yaml) |
 | Response headers as typed outputs | [`listAirports`](templates/listAirports.yaml) reads `ratelimit-limit` and `ratelimit-remaining`, and a plan compares them |
 | gjson in extract rules | Counts (`data.slices.#`), queries (`data.offers.#(owner.iata_code=="ZZ")#`), and defaults (`nextCursor: {path: meta.after, default: ""}`) |
 | Conditional and iteration blocks | [`createOfferRequest`](templates/createOfferRequest.yaml) adds a return or onward slice only when asked, and writes one passenger per age |
@@ -292,13 +403,12 @@ find them.
 ## Not covered yet
 
 - **Next:**
-  - **Booking:** orders paid at once or held and paid later, for one to four passengers, with seats, bags, loyalty
-    accounts, and metadata, plus the order-side test routes
   - **After booking:** changes, cancellations, services added to an order, payments, airline-initiated changes, and
     airline credits
   - **The account:** customer users and groups, component client keys, Links sessions, and webhooks
 - **Needs Duffel to enable it:** on the account this package was built against, Stays and Cars answer 403, and cards
-  and 3-D Secure answer 403 `unavailable_feature`
+  and 3-D Secure answer 403 `unavailable_feature`, so the order-side test routes that pay by card (LTN → STN,
+  SEN → STN, and LCY → STN) aren't covered
 - **Left out, per Duffel's docs:** partial offer requests (deprecated), Payment Intents and Refunds (closed to new
   customers), ARC/BSP cash payments, and private fares (no test codes)
 
@@ -310,13 +420,16 @@ env.yaml            test and test-ci: api.duffel.com, Duffel-Version v2, the tok
 graph.yaml          22 nodes: each endpoint's inputs and outputs, and what Duffel does
 templates/          one request and response template per node
 domain.yaml         what the plans proved about Duffel, as concepts
-workflows/          Find Offer and its addons
+workflows/          Find Offer, Book Flight with its payment slots, and their addons
+layers/             parties of one to four passengers
 plans/reference/    places, airports, cities, airlines, aircraft, and loyalty programmes
 plans/search/       searches, offers, pricing, seat maps, loyalty, upsells, and batch search
-plans/scenarios/    Duffel's test routes
-visualizers/        the Offers and Seat map tabs for the web UI
+plans/booking/      orders paid at once or held, with seats, bags, loyalty, and metadata
+plans/scenarios/    Duffel's test routes, search and order side
+plans/zz-no-live-orders.yaml   the guard that no order the package booked is left active
+visualizers/        the Offers, Seat map, and Order tabs for the web UI
 docs/images/        the screenshots in this README
 ```
 
-Run output goes to `_output/`, which git ignores, along with `setup-*.sh`, `env.secrets*.yaml`, and `.env`, so a
-token kept in one of those never reaches the repository.
+Run output goes to `_output/`, which git ignores, along with one-off `probes/`, `setup-*.sh`, `env.secrets*.yaml`, and
+`.env`, so a token kept in one of those never reaches the repository.

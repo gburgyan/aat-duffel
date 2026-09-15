@@ -1,0 +1,22 @@
+adapter: getOfferBags
+protocol: http
+
+# The offer read again for its extra checked bags only, so an order that buys bags names them with a
+# step of its own and getOffer's outputs don't wire bags into every order.
+request:
+  method: GET
+  path: /air/offers/{{offerId}}?return_available_services=true
+
+response:
+  extract:
+    bagServices:
+      path: 'data.available_services.#(metadata.type=="checked")#'
+      default: []
+      fields:
+        id: id
+        passengerId: passenger_ids.0
+        segmentId: segment_ids.0
+        amount: total_amount
+    bagServiceCount:
+      path: 'data.available_services.#(metadata.type=="checked")#|#'
+      default: 0

@@ -1,0 +1,20 @@
+execution:
+  steps:
+    - id: book
+      node: createOrder
+      isGoal: true
+      description: Hold the offer unpaid, at the priced total, to be paid by its deadline
+      values:
+        orderType: hold
+        offerId: AUTOWIRE
+        bookingPassengers: AUTOWIRE
+        infantCarers: AUTOWIRE?
+        userId: AUTOWIRE?
+        services: {from: price.intendedServices}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: >-
+              liveMode == false && orderType == "hold" && awaitingPayment == true && paidAt == "" &&
+              paymentRequiredBy != "" && priceGuaranteeExpiresAt != "" && totalAmount == "{{price.totalAmount}}" &&
+              serviceCount == "{{price.intendedServiceCount}}" && metadataSource == "aat-duffel"

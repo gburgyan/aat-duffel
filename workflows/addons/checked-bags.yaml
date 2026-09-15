@@ -1,0 +1,11 @@
+execution:
+  steps:
+    - id: bags
+      node: getOfferBags
+      description: An extra checked bag for each passenger on each flight
+      values:
+        offerId: {from: offer.offerId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: bagServiceCount >= 1
