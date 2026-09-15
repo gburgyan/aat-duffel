@@ -1,0 +1,19 @@
+adapter: listWebhooks
+protocol: http
+
+request:
+  method: GET
+  path: /air/webhooks?limit=200
+
+response:
+  extract:
+    webhookCount: 'data.#'
+  transform: |
+    local active, ours = 0, 0
+    for _, webhook in ipairs(json_path("data") or {}) do
+      if webhook.active == true then active = active + 1 end
+      if type(webhook.url) == "string" and string.find(webhook.url, "aat-duffel", 1, true) then ours = ours + 1 end
+    end
+    outputs.activeWebhookCount = active
+    outputs.ourWebhookCount = ours
+    return outputs

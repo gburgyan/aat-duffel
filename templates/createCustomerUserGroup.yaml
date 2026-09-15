@@ -1,0 +1,18 @@
+adapter: createCustomerUserGroup
+protocol: http
+
+request:
+  method: POST
+  path: /identity/customer/user_groups
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"name": "{{name}}"{{?userId}}, "user_ids": ["{{userId}}"]{{/userId}}}}
+
+response:
+  extract:
+    customerUserGroupId: data.id
+    name: data.name
+    userCount:
+      path: 'data.user_ids.#'
+      default: 0

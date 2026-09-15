@@ -1,0 +1,27 @@
+adapter: createWebhook
+protocol: http
+
+request:
+  method: POST
+  path: /air/webhooks
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"url": "{{url}}", "events": [{{#events}}"{{.}}"{{/events}}]}}
+
+response:
+  extract:
+    webhookId: data.id
+    url: data.url
+    active: data.active
+    liveMode: data.live_mode
+  # The signing secret comes back only here. No output holds it: only whether one came back. The raw
+  # response stays in the run archive, which git ignores.
+  transform: |
+    local webhook = json_path("data") or {}
+    local events = {}
+    for _, event in ipairs(webhook.events or {}) do table.insert(events, event) end
+    table.sort(events)
+    outputs.events = table.concat(events, ",") .. ""
+    outputs.secretIssued = type(webhook.secret) == "string" and #webhook.secret > 0
+    return outputs

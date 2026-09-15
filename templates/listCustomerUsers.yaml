@@ -1,0 +1,16 @@
+adapter: listCustomerUsers
+protocol: http
+
+request:
+  method: GET
+  path: /identity/customer/users?limit={{limit}}{{?email}}&email={{email}}{{/email}}{{?after}}&after={{after}}{{/after}}
+
+response:
+  extract:
+    userCount: 'data.#'
+    firstCustomerUserId:
+      path: data.0.id
+      default: ""
+    nextCursor:
+      path: meta.after
+      default: ""

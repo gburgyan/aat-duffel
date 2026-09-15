@@ -1,0 +1,8 @@
+adapter: deleteCustomerUserGroup
+protocol: http
+
+request:
+  method: DELETE
+  path: /identity/customer/user_groups/{{customerUserGroupId}}
+
+response: {}

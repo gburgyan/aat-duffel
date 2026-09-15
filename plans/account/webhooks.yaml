@@ -1,0 +1,155 @@
+# A webhook with no receiver behind its URL. It is created with its signing secret (which no output keeps)
+# and listed; a second webhook in the same mode is refused. It is deactivated, then reactivated with a
+# second event. A ping fails, since nothing receives it, but Duffel still records the delivery: a
+# ping.triggered event that reads back. The webhook is deleted, and updating it afterwards is 404.
+# Cleanup has nothing left to do.
+metadata:
+  prompt: Create a webhook, update it, ping it, read its delivery, and delete it
+  graphVersion: "1.0.0"
+intent:
+  goal: patchDeleted
+  description: A webhook's lifecycle, with its ping delivery recorded
+
+execution:
+  steps:
+    - id: before
+      node: listWebhooks
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: ourWebhookCount == 0
+
+    - id: hook
+      node: createWebhook
+      dependsOn: [before]
+      values:
+        events: [order.created]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'active == true && liveMode == false && secretIssued == true && events == "order.created"'
+
+    - id: hooks
+      node: listWebhooks
+      dependsOn: [hook]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: webhookCount == 1 && ourWebhookCount == 1 && activeWebhookCount == 1
+
+    - id: secondHook
+      node: createWebhook
+      dependsOn: [hooks]
+      values:
+        url: https://example.com/aat-duffel/second
+      expectFailure:
+        status: [422]
+        description: Duffel allows one webhook per mode
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: unsafe_unique
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: validation_error
+            raw: true
+
+    - id: deactivate
+      node: updateWebhook
+      dependsOn: [secondHook]
+      values:
+        webhookId: {from: hook.webhookId}
+        active: false
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'active == false && events == "order.created"'
+
+    - id: reactivate
+      node: updateWebhook
+      dependsOn: [deactivate]
+      values:
+        webhookId: {from: hook.webhookId}
+        active: true
+        events: [order.created, order.airline_initiated_change_detected]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'active == true && events == "order.airline_initiated_change_detected,order.created"'
+
+    - id: ping
+      node: pingWebhook
+      dependsOn: [reactivate]
+      values:
+        webhookId: {from: hook.webhookId}
+      expectFailure:
+        status: [422]
+        description: Nothing behind the URL receives the ping
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: webhook_client_error
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_state_error
+            raw: true
+
+    - id: deliveries
+      node: listWebhookDeliveries
+      dependsOn: [ping]
+      values:
+        webhookId: {from: hook.webhookId}
+      repeat:
+        until: deliveryCount >= 1
+        interval: 2s
+        max: 15
+        timeout: 40s
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'latestEventType == "ping.triggered" && latestResponseStatusCode >= 400'
+
+    - id: event
+      node: getWebhookEvent
+      dependsOn: [deliveries]
+      values:
+        eventId: {from: deliveries.latestEventId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'eventType == "ping.triggered" && liveMode == false'
+
+    - id: deleteHook
+      node: deleteWebhook
+      dependsOn: [event]
+      values:
+        webhookId: {from: hook.webhookId}
+
+    - id: patchDeleted
+      node: updateWebhook
+      dependsOn: [deleteHook]
+      isGoal: true
+      values:
+        webhookId: {from: hook.webhookId}
+        active: false
+      expectFailure:
+        status: [404]
+        description: The webhook is gone
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: not_found
+            raw: true
+
+  verification:
+    - node: listWebhooks
+      purpose: No webhook of this package is left
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: ourWebhookCount == 0

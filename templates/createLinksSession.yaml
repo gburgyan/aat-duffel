@@ -1,0 +1,25 @@
+adapter: createLinksSession
+protocol: http
+
+request:
+  method: POST
+  path: /links/sessions
+  headers:
+    Content-Type: application/json
+  # Every field is optional here, so a plan can send a session without its required fields and see
+  # Duffel refuse it. The commas come from compound conditionals: each field after the first is preceded
+  # by ", " when any field before it was sent.
+  body: |
+    {"data": { {{?reference}}"reference": "{{reference}}"{{/reference}}{{?successUrl}}{{?reference}}, {{/reference}}"success_url": "{{successUrl}}"{{/successUrl}}{{?failureUrl}}{{?reference|successUrl}}, {{/reference|successUrl}}"failure_url": "{{failureUrl}}"{{/failureUrl}}{{?abandonmentUrl}}{{?reference|successUrl|failureUrl}}, {{/reference|successUrl|failureUrl}}"abandonment_url": "{{abandonmentUrl}}"{{/abandonmentUrl}}{{?travellerCurrency}}{{?reference|successUrl|failureUrl|abandonmentUrl}}, {{/reference|successUrl|failureUrl|abandonmentUrl}}"traveller_currency": "{{travellerCurrency}}"{{/travellerCurrency}} }}
+
+response:
+  # A session URL opens a checkout that books on the account, so no output holds it: only whether one
+  # came back and its host. The raw response stays in the run archive, which git ignores.
+  transform: |
+    local session = json_path("data") or {}
+    local url = session.url
+    outputs.urlIssued = type(url) == "string" and #url > 0
+    -- The session token rides in the query string (https://links.duffel.com?token=...), so the host stops
+    -- at the first /, ?, or #.
+    outputs.urlHost = type(url) == "string" and (string.match(url, "^https?://([^/?#]+)") or "") or ""
+    return outputs

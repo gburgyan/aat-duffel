@@ -1,0 +1,104 @@
+# An order booked for a customer user: the order names the user, listing orders by user_id finds exactly
+# that order, and a component client key is issued for the user and the order together. Cleanup cancels
+# the order; the user stays, since Duffel's API reference lists no way to delete one.
+metadata:
+  prompt: Book an order for a customer user and find it by the user
+  graphVersion: "1.0.0"
+intent:
+  goal: keyForOrder
+  description: An order booked for a customer user
+
+execution:
+  steps:
+    - id: user
+      node: createCustomerUser
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: search
+      node: createOfferRequest
+      dependsOn: [user]
+      values:
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+        maxConnections: 0
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+
+    - id: price
+      node: priceOffer
+      dependsOn: [offer]
+      values:
+        offerId: {from: offer.offerId}
+
+    - id: book
+      node: createOrder
+      dependsOn: [price]
+      values:
+        orderType: instant
+        offerId: {from: offer.offerId}
+        bookingPassengers: {from: offer.bookingPassengers}
+        amount: {from: price.totalAmount}
+        currency: {from: price.totalCurrency}
+        userId: {from: user.customerUserId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'userCount == 1 && awaitingPayment == false && metadataSource == "aat-duffel"'
+
+    - id: byUser
+      node: listOrders
+      dependsOn: [book]
+      values:
+        userId: {from: user.customerUserId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: orderCount == 1 && ourOrderCount == 1
+
+    - id: keyForOrder
+      node: createComponentClientKey
+      dependsOn: [byUser]
+      isGoal: true
+      values:
+        userId: {from: user.customerUserId}
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: keyIssued == true && keyPartCount == 3
+
+  verification:
+    - node: getOrder
+      purpose: The order still names the customer user
+      values:
+        orderId: {from: book.orderId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: userCount == 1

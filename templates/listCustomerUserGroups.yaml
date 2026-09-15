@@ -1,0 +1,13 @@
+adapter: listCustomerUserGroups
+protocol: http
+
+request:
+  method: GET
+  path: /identity/customer/user_groups?limit={{limit}}{{?after}}&after={{after}}{{/after}}
+
+response:
+  extract:
+    groupCount: 'data.#'
+    nextCursor:
+      path: meta.after
+      default: ""

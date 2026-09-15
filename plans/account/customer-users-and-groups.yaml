@@ -1,0 +1,186 @@
+# A customer user created, read, replaced with PUT, and found by email. A group created with the user as
+# its member, read, renamed, listed, and shown on the user. Component client keys issued with no claims,
+# for the user, and for a user that doesn't exist, since Duffel checks claims only when a key is used.
+# Then the group deleted (reading it again is 404) and a second user with the same email refused.
+# Duffel's API reference lists no way to delete a customer user, so each run leaves one on the account.
+metadata:
+  prompt: Create a customer user and a group, issue component client keys, and delete the group
+  graphVersion: "1.0.0"
+intent:
+  goal: duplicateEmail
+  description: Customer users, groups, and component client keys
+
+execution:
+  steps:
+    - id: user
+      node: createCustomerUser
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'liveMode == false && groupId == "" && givenName == "Amelia" && familyName == "Earhart"'
+
+    - id: readUser
+      node: getCustomerUser
+      dependsOn: [user]
+      values:
+        customerUserId: {from: user.customerUserId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'email == "{{user.email}}" && familyName == "Earhart"'
+
+    - id: replaceUser
+      node: updateCustomerUser
+      dependsOn: [readUser]
+      values:
+        customerUserId: {from: user.customerUserId}
+        email: {from: user.email}
+        familyName: Putnam
+        phoneNumber: "+442080160508"
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'email == "{{user.email}}" && familyName == "Putnam" && phoneNumber == "+442080160508"'
+
+    - id: byEmail
+      node: listCustomerUsers
+      dependsOn: [replaceUser]
+      values:
+        email: {from: user.email}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'userCount == 1 && firstCustomerUserId == "{{user.customerUserId}}"'
+
+    - id: group
+      node: createCustomerUserGroup
+      dependsOn: [byEmail]
+      values:
+        userId: {from: user.customerUserId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: userCount == 1
+
+    - id: readGroup
+      node: getCustomerUserGroup
+      dependsOn: [group]
+      values:
+        customerUserGroupId: {from: group.customerUserGroupId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'name == "{{group.name}}" && userCount == 1'
+
+    - id: renameGroup
+      node: updateCustomerUserGroup
+      dependsOn: [readGroup]
+      values:
+        customerUserGroupId: {from: group.customerUserGroupId}
+        name: "aat-duffel renamed {{random 6}}"
+        userId: {from: user.customerUserId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'name == "{{name}}" && userCount == 1'
+
+    - id: groups
+      node: listCustomerUserGroups
+      dependsOn: [renameGroup]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: groupCount >= 1
+
+    - id: userInGroup
+      node: getCustomerUser
+      dependsOn: [groups]
+      values:
+        customerUserId: {from: user.customerUserId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'groupId == "{{group.customerUserGroupId}}"'
+
+    - id: keyNoClaims
+      node: createComponentClientKey
+      dependsOn: [userInGroup]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: keyIssued == true && keyPartCount == 3
+
+    - id: keyForUser
+      node: createComponentClientKey
+      dependsOn: [keyNoClaims]
+      values:
+        userId: {from: user.customerUserId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: keyIssued == true && keyPartCount == 3
+
+    - id: keyForUnknownUser
+      node: createComponentClientKey
+      dependsOn: [keyForUser]
+      values:
+        userId: icu_0000000000000000000000
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: keyIssued == true
+
+    - id: deleteGroup
+      node: deleteCustomerUserGroup
+      dependsOn: [keyForUnknownUser]
+      values:
+        customerUserGroupId: {from: group.customerUserGroupId}
+
+    - id: readDeletedGroup
+      node: getCustomerUserGroup
+      dependsOn: [deleteGroup]
+      values:
+        customerUserGroupId: {from: group.customerUserGroupId}
+      expectFailure:
+        status: [404]
+        description: The group is gone
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: not_found
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_request_error
+            raw: true
+
+    - id: duplicateEmail
+      node: createCustomerUser
+      dependsOn: [readDeletedGroup]
+      isGoal: true
+      values:
+        email: {from: user.email}
+      expectFailure:
+        status: [422]
+        description: A user with this email already exists outside any group
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: emails_not_unique
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: invalid_state_error
+            raw: true
+
+  verification:
+    - node: listCustomerUsers
+      purpose: Exactly one customer user has this run's email
+      values:
+        email: {from: user.email}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: userCount == 1

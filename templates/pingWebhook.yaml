@@ -1,0 +1,8 @@
+adapter: pingWebhook
+protocol: http
+
+request:
+  method: POST
+  path: /air/webhooks/{{webhookId}}/actions/ping
+
+response: {}

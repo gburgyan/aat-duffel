@@ -1,0 +1,21 @@
+adapter: updateWebhook
+protocol: http
+
+request:
+  method: PATCH
+  path: /air/webhooks/{{webhookId}}
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"active": {{active}}{{?events}}, "events": [{{#events}}"{{.}}"{{/events}}]{{/events}}}}
+
+response:
+  extract:
+    webhookId: data.id
+    active: data.active
+  transform: |
+    local events = {}
+    for _, event in ipairs(json_path("data.events") or {}) do table.insert(events, event) end
+    table.sort(events)
+    outputs.events = table.concat(events, ",") .. ""
+    return outputs

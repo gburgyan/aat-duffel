@@ -1,0 +1,25 @@
+adapter: createComponentClientKey
+protocol: http
+
+request:
+  method: POST
+  path: /identity/component_client_keys
+  headers:
+    Content-Type: application/json
+  # Claims are optional: none, a user, or a user with an order.
+  body: |
+    {"data": { {{?userId}}"user_id": "{{userId}}"{{?orderId}}, "order_id": "{{orderId}}"{{/orderId}}{{/userId}} }}
+
+response:
+  # The key is a credential for Duffel's UI components, so no output holds it: only whether one came
+  # back and how many dot-separated parts it has (a JWT has three). The raw response stays in the
+  # run archive, which git ignores.
+  transform: |
+    local key = json_path("data.component_client_key")
+    outputs.keyIssued = type(key) == "string" and #key > 0
+    local parts = 0
+    if type(key) == "string" then
+      for _ in string.gmatch(key, "[^.]+") do parts = parts + 1 end
+    end
+    outputs.keyPartCount = parts
+    return outputs

@@ -1,0 +1,14 @@
+adapter: getCustomerUserGroup
+protocol: http
+
+request:
+  method: GET
+  path: /identity/customer/user_groups/{{customerUserGroupId}}
+
+response:
+  extract:
+    customerUserGroupId: data.id
+    name: data.name
+    userCount:
+      path: 'data.user_ids.#'
+      default: 0

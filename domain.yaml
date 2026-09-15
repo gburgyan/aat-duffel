@@ -207,6 +207,53 @@ concepts:
       and plans/after-booking/airline-credits.yaml.
     applies_to: [airlineCreditId, airlineCreditCount, code]
 
+  customerUsers:
+    description: >-
+      A customer user (icu_) is created with an email and both names, replaced whole with PUT, and found
+      with the email filter. A second user with the same email is 422 emails_not_unique (an
+      invalid_state_error). Duffel's API reference lists no way to delete a user, so each run that
+      creates one leaves it on the account; the plans make each email unique. An order booked with users
+      names the user, and GET /air/orders?user_id= finds exactly that order. Proven by
+      plans/account/customer-users-and-groups.yaml and plans/account/order-for-customer-user.yaml.
+    applies_to: [customerUserId, email, userId, userCount]
+    constraint: give each run's user a unique email
+
+  customerUserGroups:
+    description: >-
+      A group (usg_) takes its members as user_ids, and a member's user shows the group. PATCH renames it,
+      DELETE answers 204 with no body, and reading it afterwards is 404 not_found (an
+      invalid_request_error). Cleanup deletes every group a plan creates. Proven by
+      plans/account/customer-users-and-groups.yaml.
+    applies_to: [customerUserGroupId, groupId]
+
+  componentClientKeys:
+    description: >-
+      POST /identity/component_client_keys issues a three-part JWT for Duffel's UI components with no
+      claims, a user, a user and an order, or a user that doesn't exist: the claims are checked only when
+      the key is used. The key is a credential, so no output holds it. Proven by
+      plans/account/customer-users-and-groups.yaml and plans/account/order-for-customer-user.yaml.
+    applies_to: [keyIssued, userId, orderId]
+
+  linksSessions:
+    description: >-
+      POST /links/sessions answers 201 with only a url on links.duffel.com, its session token in the query
+      string. reference, success_url, failure_url, and abandonment_url are required; without them the
+      session is 422 with one validation_required error each. The URL books on the account, so no output
+      holds it. Proven by plans/account/links-sessions.yaml.
+    applies_to: [reference, successUrl, failureUrl, abandonmentUrl, urlIssued]
+
+  webhooks:
+    description: >-
+      A webhook (end_) is created with a url and events, and its signing secret comes back only then. An
+      account holds one per mode: a second is 422 unsafe_unique (a validation_error). PATCH sets active and
+      events. With nothing behind the URL, a ping is 422 webhook_client_error, yet Duffel records a
+      delivery (del_) of a ping.triggered event (wev_) with the status the URL answered, readable from
+      GET /air/webhooks/deliveries and GET /air/webhooks/events/{id}. DELETE answers 204, and updating a
+      deleted webhook is 404 not_found. Redelivering the event answered 500 internal_server_error in a
+      run. Proven by plans/account/webhooks.yaml.
+    applies_to: [webhookId, events, active, deliveryCount, eventId]
+    constraint: delete the webhook when done, since another can't be created while it exists
+
   productAccess:
     description: >-
       Which Duffel products a test account reaches depends on what Duffel has enabled for it. On
@@ -228,7 +275,8 @@ types:
       (loyalty programme); searches orq_ (offer request), off_ (offer), pas_ (passenger), sli_
       (slice), and seg_ (segment); orders ord_ (order), ase_ (service), and pay_ (payment); after
       booking ocr_ (change request), oco_ (change offer), oce_ (change), ore_ (cancellation), aic_
-      (airline-initiated change), and acd_ (airline credit).
+      (airline-initiated change), and acd_ (airline credit); the account icu_ (customer user), usg_
+      (group), end_ (webhook), wev_ (webhook event), and del_ (delivery).
     format: string
     validation: "^[a-z]{3}_[A-Za-z0-9_]+$"
 

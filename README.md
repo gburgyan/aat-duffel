@@ -5,9 +5,9 @@ graph describes each endpoint, workflows chain the endpoints, and plans prove wh
 against Duffel's live test API. What this README says about Duffel comes from those runs. It says so where a run showed
 something that no plan asserts yet, and it names Duffel's docs where they're the source.
 
-**Status:** places, reference data, search, offers, booking, and what comes after booking are done: 48 endpoints, all
-run by 39 plans that pass together in under three minutes. The account features come next
-([what's not covered yet](#not-covered-yet)).
+**Status:** places, reference data, search, offers, booking, what comes after booking, and the account features are
+done: 66 endpoints, all run by 43 plans that pass together in about three minutes
+([what's not covered](#not-covered-yet)).
 
 ```text
 $ aat run plan search/one-way
@@ -57,7 +57,12 @@ latest` shows the run:
 
 Searches check that `live_mode` is false before anything is booked, so a live token stops a plan at its first search.
 Every order a plan books carries `metadata.source: aat-duffel` and is cancelled in cleanup, and the last plan in a
-batch checks that none is left.
+batch checks that none is left. Groups and webhooks are deleted too, but Duffel offers no way to delete a customer
+user or an airline credit, so a full batch leaves two of each on the test account.
+
+A webhook's signing secret, a component client key, and a Links session URL are credentials. No output holds them,
+so they never print or reach a display, but the raw responses stay in the run archives under `_output/`, which git
+ignores.
 
 ### Run it
 
@@ -66,7 +71,8 @@ aat validate --strict            # check every file, template, workflow, and pla
 aat run plan search/one-way      # the run above
 aat run plan booking/instant-family-seats-bags   # book a family of four with seats and bags, then cancel it
 aat run plan after-booking/cancel-after-change   # book, change to premium economy, cancel, and check the refund
-aat run batch                    # all 39 plans, under three minutes; sequential, so the order guard runs last
+aat run plan account/webhooks    # a webhook's whole life, its failed ping still recorded as a delivery
+aat run batch                    # all 43 plans, about three minutes; sequential, so the order guard runs last
 aat run batch scenarios          # only Duffel's test routes
 aat web view latest              # open the last run in the browser
 ```
@@ -253,9 +259,9 @@ createOrderCancellation:
   cleanup: confirmOrderCancellation
 ```
 
-`aat run show <batch>` sums up what cleanup did. In the last full batch, cleanup quoted 13 cancellations and confirmed
-14 (one of them a quote a plan left unconfirmed), with 0 failures. Five plans cancelled their orders themselves, so
-their entries show as released. Then
+`aat run show <batch>` sums up what cleanup did. In the last full batch, cleanup quoted 14 cancellations and confirmed
+15 (one of them a quote a plan left unconfirmed), with 0 failures. Five plans cancelled their orders themselves, and
+the account plans deleted their group and webhook, so those entries show as released. Then
 [`zz-no-live-orders`](plans/zz-no-live-orders.yaml), which sorts last, reads every page of the account's orders and
 fails if one of the package's orders is still active:
 
@@ -361,7 +367,7 @@ at least one plan, the cancellation nodes in cleanup.
 | `POST /air/batch_offer_requests`, `GET /air/batch_offer_requests/{id}` | `createBatchOfferRequest`, `getBatchOfferRequest` | [batch](plans/search/batch.yaml) |
 | `POST /air/orders` | `createOrder` | Book Flight: the [booking plans](plans/booking/) and the order-side scenarios |
 | `GET /air/orders/{id}`, `PATCH /air/orders/{id}` | `getOrder`, `updateOrder` | Book Flight, [metadata](plans/booking/metadata.yaml) |
-| `GET /air/orders` | `listOrders` | [zz-no-live-orders](plans/zz-no-live-orders.yaml), [metadata](plans/booking/metadata.yaml), the order-side scenarios |
+| `GET /air/orders` | `listOrders` | [zz-no-live-orders](plans/zz-no-live-orders.yaml), [metadata](plans/booking/metadata.yaml), [order-for-customer-user](plans/account/order-for-customer-user.yaml), the order-side scenarios |
 | `POST /air/payments`, `GET /air/payments`, `GET /air/payments/{id}` | `createPayment`, `listPayments`, `getPayment` | [hold-then-pay-trio-seats](plans/booking/hold-then-pay-trio-seats.yaml), [airline-credits](plans/after-booking/airline-credits.yaml) |
 | `POST /air/order_cancellations`, `POST /air/order_cancellations/{id}/actions/confirm` | `createOrderCancellation`, `confirmOrderCancellation` | cleanup after every booking, Cancel Order, [cancel-quote-then-cleanup](plans/after-booking/cancel-quote-then-cleanup.yaml) |
 | `GET /air/order_cancellations/{id}`, `GET /air/order_cancellations` | `getOrderCancellation`, `listOrderCancellations` | Cancel Order: the [cancel plans](plans/after-booking/) |
@@ -371,6 +377,12 @@ at least one plan, the cancellation nodes in cleanup.
 | `GET /air/orders/{id}/available_services`, `POST /air/orders/{id}/services` | `listOrderAvailableServices`, `addOrderServices` | [services-after-booking](plans/after-booking/services-after-booking.yaml), [services-after-hold](plans/after-booking/services-after-hold.yaml) |
 | `GET /air/airline_initiated_changes`, `POST /air/airline_initiated_changes/{id}/actions/accept` | `listAirlineInitiatedChanges`, `acceptAirlineInitiatedChange` | [airline-initiated-change](plans/after-booking/airline-initiated-change.yaml) |
 | `POST /air/airline_credits`, `GET /air/airline_credits/{id}`, `GET /air/airline_credits` | `createAirlineCredit`, `getAirlineCredit`, `listAirlineCredits` | [airline-credits](plans/after-booking/airline-credits.yaml) |
+| `POST /identity/customer/users`, `GET /identity/customer/users/{id}`, `PUT /identity/customer/users/{id}`, `GET /identity/customer/users` | `createCustomerUser`, `getCustomerUser`, `updateCustomerUser`, `listCustomerUsers` | [customer-users-and-groups](plans/account/customer-users-and-groups.yaml), [order-for-customer-user](plans/account/order-for-customer-user.yaml) |
+| `POST /identity/customer/user_groups`, `GET /identity/customer/user_groups/{id}`, `PATCH /identity/customer/user_groups/{id}`, `GET /identity/customer/user_groups`, `DELETE /identity/customer/user_groups/{id}` | `createCustomerUserGroup`, `getCustomerUserGroup`, `updateCustomerUserGroup`, `listCustomerUserGroups`, `deleteCustomerUserGroup` | [customer-users-and-groups](plans/account/customer-users-and-groups.yaml) |
+| `POST /identity/component_client_keys` | `createComponentClientKey` | [customer-users-and-groups](plans/account/customer-users-and-groups.yaml), [order-for-customer-user](plans/account/order-for-customer-user.yaml) |
+| `POST /links/sessions` | `createLinksSession` | [links-sessions](plans/account/links-sessions.yaml) |
+| `POST /air/webhooks`, `GET /air/webhooks`, `PATCH /air/webhooks/{id}`, `DELETE /air/webhooks/{id}`, `POST /air/webhooks/{id}/actions/ping` | `createWebhook`, `listWebhooks`, `updateWebhook`, `deleteWebhook`, `pingWebhook` | [webhooks](plans/account/webhooks.yaml) |
+| `GET /air/webhooks/deliveries`, `GET /air/webhooks/events/{id}` | `listWebhookDeliveries`, `getWebhookEvent` | [webhooks](plans/account/webhooks.yaml) |
 
 ### Plans
 
@@ -403,6 +415,10 @@ at least one plan, the cancellation nodes in cleanup.
 | [after-booking/airline-initiated-change](plans/after-booking/airline-initiated-change.yaml) | On LHR → LTN, the order's one airline-initiated change is accepted, and the order's flight leaves at a new time |
 | [after-booking/cancel-to-airline-credits](plans/after-booking/cancel-to-airline-credits.yaml) | On LTN → SYD, the cancellation refunds the whole total as one airline credit |
 | [after-booking/airline-credits](plans/after-booking/airline-credits.yaml) | A credit created, read back unspent, and listed; a payment with it is 422 `validation_inclusion` |
+| [account/customer-users-and-groups](plans/account/customer-users-and-groups.yaml) | A user created, read, replaced with PUT, and found by email. A group with the user in it, read, renamed, listed, and shown on the user. Client keys with no claims, for the user, and for an unknown user. The group deleted and then 404, and a second user with the same email 422 `emails_not_unique`. |
+| [account/order-for-customer-user](plans/account/order-for-customer-user.yaml) | An order booked for a user names the user, listing orders by `user_id` finds exactly that order, and a client key covers the user and the order |
+| [account/links-sessions](plans/account/links-sessions.yaml) | A session with its required fields gets a URL on links.duffel.com, and one without them is 422 with four `validation_required` errors |
+| [account/webhooks](plans/account/webhooks.yaml) | A webhook created and listed, a second refused with `unsafe_unique`, and the first deactivated, then reactivated with two events. A failed ping is still recorded as a `ping.triggered` delivery with an event, and the deleted webhook is 404. |
 | [zz-no-live-orders](plans/zz-no-live-orders.yaml) | Every page of the account's orders, read with `repeat.next`: none of the package's orders is still active |
 
 ### Duffel's test routes
@@ -489,6 +505,22 @@ find them.
   `validation_format`), but `POST /air/payments` takes only balance and card, so spending it is 422
   `validation_inclusion`. Duffel's API reference lists no way to delete a credit, so every full batch leaves two on
   the account.
+- **Customer users can't be deleted either.** A user (`icu_`) is replaced whole with PUT, and the email filter finds
+  it. A second user with the same email is 422 `emails_not_unique`. Every full batch leaves two users on the account.
+- **Groups hold users and delete cleanly.** A group (`usg_`) takes its members as `user_ids`, and a member shows the
+  group. PATCH renames it, DELETE answers 204, and reading it afterwards is 404 `not_found`.
+- **Orders can name a customer user.** An order booked with `users` names that user, and the `user_id` list filter
+  finds exactly that order.
+- **Component client keys don't check their claims.** A key comes back as a three-part JWT with no claims, for a user,
+  for a user and an order, and for a user that doesn't exist.
+- **A Links session answers with a URL and nothing else.** The URL is on links.duffel.com, with the session token in
+  its query string. Without `reference` and the three redirect URLs, a session is 422 with a `validation_required`
+  error for each.
+- **One webhook per mode, and a ping needs a receiver.** A second webhook is 422 `unsafe_unique`, and the signing
+  secret comes back only when a webhook is created. With nothing behind the URL, a ping is 422
+  `webhook_client_error`, yet Duffel records the delivery: a `ping.triggered` event with the status the URL answered
+  (405 from example.com in the runs). A deleted webhook is 404 to update. Redelivering the event answered 500
+  `internal_server_error` in a run, so no plan does it.
 
 ## AAT features on display
 
@@ -504,6 +536,7 @@ find them.
 | Repeating a read until a condition holds | [`search/batch`](plans/search/batch.yaml): `repeat` with `until`, `collect`, `interval`, `max`, and `timeout` |
 | Expected failures, checked by error code | [`search-timeout`](plans/scenarios/search-timeout.yaml), [`offer-gone`](plans/scenarios/offer-gone.yaml), the three order-side routes, and [Upsell Refused](workflows/addons/upsell-refused.yaml) |
 | Response headers as typed outputs | [`listAirports`](templates/listAirports.yaml) reads `ratelimit-limit` and `ratelimit-remaining`, and a plan compares them |
+| Secrets kept out of outputs | A webhook's signing secret, a component client key, and a Links session URL never become outputs: their transforms report only `secretIssued`, `keyIssued`, and `urlHost` |
 | gjson in extract rules | Counts (`data.slices.#`), queries (`data.offers.#(owner.iata_code=="ZZ")#`), and defaults (`nextCursor: {path: meta.after, default: ""}`) |
 | Conditional and iteration blocks | [`createOfferRequest`](templates/createOfferRequest.yaml) adds a return or onward slice only when asked, and writes one passenger per age |
 | Lists and date expressions in step values | `passengerAges: [40, 38, 8, 1]` and `departureDate: "{{today + 30 days}}"` in [`journey-shapes`](plans/search/journey-shapes.yaml) |
@@ -516,9 +549,8 @@ find them.
 
 ## Not covered yet
 
-- **Next, the account:** customer users and groups, component client keys, Links sessions, and webhooks
-- **Not in a plan yet:** recording an action taken elsewhere on an airline-initiated change (PATCH), and cancelling
-  an order with a change left pending
+- **Not in a plan yet:** recording an action taken elsewhere on an airline-initiated change (PATCH), cancelling an
+  order with a change left pending, and redelivering a webhook event, which answered 500 in a run
 - **Needs Duffel to enable it:** on the account this package was built against, Stays and Cars answer 403, and cards
   and 3-D Secure answer 403 `unavailable_feature`, so the order-side test routes that pay by card (LTN → STN,
   SEN → STN, and LCY → STN) aren't covered
@@ -530,7 +562,7 @@ find them.
 ```text
 aat-project.yaml    the manifest: where everything is, and the default environment
 env.yaml            test and test-ci: api.duffel.com, Duffel-Version v2, the token from DUFFEL_ACCESS_TOKEN
-graph.yaml          48 nodes: each endpoint's inputs and outputs, and what Duffel does
+graph.yaml          66 nodes: each endpoint's inputs and outputs, and what Duffel does
 templates/          one request and response template per node
 domain.yaml         what the plans proved about Duffel, as concepts
 workflows/          Find Offer, Book Flight with its payment slots, and their addons
@@ -539,6 +571,7 @@ plans/reference/    places, airports, cities, airlines, aircraft, and loyalty pr
 plans/search/       searches, offers, pricing, seat maps, loyalty, upsells, and batch search
 plans/booking/      orders paid at once or held, with seats, bags, loyalty, and metadata
 plans/after-booking/  changes, cancellations, services, airline-initiated changes, and airline credits
+plans/account/      customer users and groups, component client keys, Links sessions, and webhooks
 plans/scenarios/    Duffel's test routes, search and order side
 plans/zz-no-live-orders.yaml   the guard that no order the package booked is left active
 visualizers/        the Offers, Seat map, Order, and Change offers tabs for the web UI

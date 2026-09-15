@@ -1,0 +1,25 @@
+adapter: listWebhookDeliveries
+protocol: http
+
+request:
+  method: GET
+  path: /air/webhooks/deliveries?limit=50{{?webhookId}}&endpoint_id={{webhookId}}{{/webhookId}}{{?eventType}}&type={{eventType}}{{/eventType}}{{?after}}&after={{after}}{{/after}}
+
+response:
+  extract:
+    deliveryCount: 'data.#'
+    latestDeliveryId:
+      path: data.0.id
+      default: ""
+    latestEventId:
+      path: data.0.event_id
+      default: ""
+    latestEventType:
+      path: data.0.type
+      default: ""
+    latestResponseStatusCode:
+      path: data.0.response_status_code
+      default: 0
+    nextCursor:
+      path: meta.after
+      default: ""

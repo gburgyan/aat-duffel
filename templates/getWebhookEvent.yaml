@@ -1,0 +1,12 @@
+adapter: getWebhookEvent
+protocol: http
+
+request:
+  method: GET
+  path: /air/webhooks/events/{{eventId}}
+
+response:
+  extract:
+    eventId: data.id
+    eventType: data.type
+    liveMode: data.live_mode

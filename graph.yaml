@@ -1982,6 +1982,416 @@ nodes:
       - name: code
         type: string
 
+  # --- The account: customer users and groups, component client keys, Links, and webhooks ----
+
+  createCustomerUser:
+    description: >-
+      Create a customer user (POST /identity/customer/users, 201). Duffel's API reference lists no way to
+      delete one, so each run's user stays on the account, with an email unique to the run.
+    adapter: createCustomerUser
+    tags: [account, users]
+    inputs:
+      - name: email
+        type: string
+        default: "aat-duffel-{{random 10}}@example.com"
+      - name: givenName
+        type: string
+        default: Amelia
+      - name: familyName
+        type: string
+        default: Earhart
+      - name: phoneNumber
+        type: string
+        optional: true
+      - name: groupId
+        type: string
+        optional: true
+    outputs:
+      - name: customerUserId
+        type: string
+        display: Customer user
+      - name: email
+        type: string
+      - name: givenName
+        type: string
+      - name: familyName
+        type: string
+      - name: phoneNumber
+        type: string
+      - name: groupId
+        type: string
+      - name: liveMode
+        type: boolean
+
+  getCustomerUser:
+    description: Read a customer user (GET /identity/customer/users/{id}, 200).
+    adapter: getCustomerUser
+    tags: [account, users]
+    inputs:
+      - name: customerUserId
+        type: string
+        default:
+          from: createCustomerUser.customerUserId
+    outputs:
+      - name: customerUserId
+        type: string
+      - name: email
+        type: string
+      - name: givenName
+        type: string
+      - name: familyName
+        type: string
+      - name: phoneNumber
+        type: string
+      - name: groupId
+        type: string
+      - name: liveMode
+        type: boolean
+
+  updateCustomerUser:
+    description: Replace a customer user's details (PUT /identity/customer/users/{id}, 200); email and both names are required.
+    adapter: updateCustomerUser
+    tags: [account, users]
+    inputs:
+      - name: customerUserId
+        type: string
+        default:
+          from: createCustomerUser.customerUserId
+      - name: email
+        type: string
+        default:
+          from: createCustomerUser.email
+      - name: givenName
+        type: string
+        default: Amelia
+      - name: familyName
+        type: string
+        default: Earhart
+      - name: phoneNumber
+        type: string
+        optional: true
+      - name: groupId
+        type: string
+        optional: true
+    outputs:
+      - name: customerUserId
+        type: string
+      - name: email
+        type: string
+      - name: givenName
+        type: string
+      - name: familyName
+        type: string
+      - name: phoneNumber
+        type: string
+      - name: groupId
+        type: string
+
+  listCustomerUsers:
+    description: List customer users, optionally by email (GET /identity/customer/users, 200).
+    adapter: listCustomerUsers
+    tags: [account, users, pagination]
+    inputs:
+      - name: limit
+        type: integer
+        default: 50
+      - name: email
+        type: string
+        optional: true
+      - name: after
+        type: string
+        optional: true
+    outputs:
+      - name: userCount
+        type: integer
+        display: Customer users
+      - name: firstCustomerUserId
+        type: string
+      - name: nextCursor
+        type: string
+
+  createCustomerUserGroup:
+    description: >-
+      Create a customer user group (POST /identity/customer/user_groups, 201), optionally with a member.
+      Cleanup deletes it.
+    adapter: createCustomerUserGroup
+    tags: [account, groups]
+    inputs:
+      - name: name
+        type: string
+        default: "aat-duffel {{random 8}}"
+      - name: userId
+        type: string
+        optional: true
+    outputs:
+      - name: customerUserGroupId
+        type: string
+        display: Group
+      - name: name
+        type: string
+      - name: userCount
+        type: integer
+    cleanup: deleteCustomerUserGroup
+
+  getCustomerUserGroup:
+    description: Read a customer user group (GET /identity/customer/user_groups/{id}, 200).
+    adapter: getCustomerUserGroup
+    tags: [account, groups]
+    inputs:
+      - name: customerUserGroupId
+        type: string
+        default:
+          from: createCustomerUserGroup.customerUserGroupId
+    outputs:
+      - name: customerUserGroupId
+        type: string
+      - name: name
+        type: string
+      - name: userCount
+        type: integer
+
+  updateCustomerUserGroup:
+    description: Rename a customer user group or set its member (PATCH /identity/customer/user_groups/{id}, 200).
+    adapter: updateCustomerUserGroup
+    tags: [account, groups]
+    inputs:
+      - name: customerUserGroupId
+        type: string
+        default:
+          from: createCustomerUserGroup.customerUserGroupId
+      - name: name
+        type: string
+      - name: userId
+        type: string
+        optional: true
+    outputs:
+      - name: customerUserGroupId
+        type: string
+      - name: name
+        type: string
+      - name: userCount
+        type: integer
+
+  listCustomerUserGroups:
+    description: List customer user groups (GET /identity/customer/user_groups, 200).
+    adapter: listCustomerUserGroups
+    tags: [account, groups, pagination]
+    inputs:
+      - name: limit
+        type: integer
+        default: 50
+      - name: after
+        type: string
+        optional: true
+    outputs:
+      - name: groupCount
+        type: integer
+      - name: nextCursor
+        type: string
+
+  deleteCustomerUserGroup:
+    description: Delete a customer user group (DELETE /identity/customer/user_groups/{id}).
+    adapter: deleteCustomerUserGroup
+    tags: [account, groups]
+    inputs:
+      - name: customerUserGroupId
+        type: string
+        default:
+          from: createCustomerUserGroup.customerUserGroupId
+    outputs: []
+
+  createComponentClientKey:
+    description: >-
+      Issue a component client key for Duffel's UI components (POST /identity/component_client_keys),
+      with no claims, a user, or a user and an order. The key is a credential, so no output holds it.
+    adapter: createComponentClientKey
+    tags: [account, components]
+    inputs:
+      - name: userId
+        type: string
+        optional: true
+      - name: orderId
+        type: string
+        optional: true
+    outputs:
+      - name: keyIssued
+        type: boolean
+        display: Key issued
+      - name: keyPartCount
+        type: integer
+        description: The key's dot-separated parts; a JWT has three
+
+  createLinksSession:
+    description: >-
+      Start a Duffel Links checkout session (POST /links/sessions). The session URL books on the account,
+      so no output holds it: only whether one came back and its host.
+    adapter: createLinksSession
+    tags: [account, links]
+    inputs:
+      - name: reference
+        type: string
+        optional: true
+        description: Required by Duffel; optional here so a plan can see the refusal
+      - name: successUrl
+        type: string
+        optional: true
+        description: Required by Duffel
+      - name: failureUrl
+        type: string
+        optional: true
+        description: Required by Duffel
+      - name: abandonmentUrl
+        type: string
+        optional: true
+        description: Required by Duffel
+      - name: travellerCurrency
+        type: string
+        optional: true
+    outputs:
+      - name: urlIssued
+        type: boolean
+        display: Session URL issued
+      - name: urlHost
+        type: string
+
+  createWebhook:
+    description: >-
+      Register a webhook (POST /air/webhooks, 201). Duffel allows one per live mode, and the signing secret
+      comes back only here; no output holds it. Cleanup deletes the webhook.
+    adapter: createWebhook
+    tags: [account, webhooks]
+    inputs:
+      - name: url
+        type: string
+        default: https://example.com/aat-duffel/webhooks
+      - name: events
+        type: string[]
+        default:
+          value: [order.created]
+    outputs:
+      - name: webhookId
+        type: string
+        display: Webhook
+      - name: url
+        type: string
+      - name: active
+        type: boolean
+      - name: liveMode
+        type: boolean
+      - name: events
+        type: string
+        description: The subscribed events, sorted and joined by commas
+      - name: secretIssued
+        type: boolean
+    cleanup: deleteWebhook
+
+  listWebhooks:
+    description: List the account's webhooks (GET /air/webhooks, 200).
+    adapter: listWebhooks
+    tags: [account, webhooks]
+    outputs:
+      - name: webhookCount
+        type: integer
+        display: Webhooks
+      - name: activeWebhookCount
+        type: integer
+      - name: ourWebhookCount
+        type: integer
+        description: Webhooks whose URL names aat-duffel
+
+  updateWebhook:
+    description: Activate or deactivate a webhook, or change its events (PATCH /air/webhooks/{id}, 200).
+    adapter: updateWebhook
+    tags: [account, webhooks]
+    inputs:
+      - name: webhookId
+        type: string
+        default:
+          from: createWebhook.webhookId
+      - name: active
+        type: boolean
+        default: true
+      - name: events
+        type: string[]
+        optional: true
+    outputs:
+      - name: webhookId
+        type: string
+      - name: active
+        type: boolean
+      - name: events
+        type: string
+
+  pingWebhook:
+    description: Send a webhook a test event (POST /air/webhooks/{id}/actions/ping).
+    adapter: pingWebhook
+    tags: [account, webhooks]
+    inputs:
+      - name: webhookId
+        type: string
+        default:
+          from: createWebhook.webhookId
+    outputs: []
+
+  deleteWebhook:
+    description: Delete a webhook (DELETE /air/webhooks/{id}).
+    adapter: deleteWebhook
+    tags: [account, webhooks]
+    inputs:
+      - name: webhookId
+        type: string
+        default:
+          from: createWebhook.webhookId
+    outputs: []
+
+  listWebhookDeliveries:
+    description: >-
+      List the attempts Duffel made to deliver webhook events (GET /air/webhooks/deliveries, 200), for one
+      webhook or event type.
+    adapter: listWebhookDeliveries
+    tags: [account, webhooks, pagination]
+    inputs:
+      - name: webhookId
+        type: string
+        optional: true
+      - name: eventType
+        type: string
+        optional: true
+      - name: after
+        type: string
+        optional: true
+    outputs:
+      - name: deliveryCount
+        type: integer
+        display: Deliveries
+      - name: latestDeliveryId
+        type: string
+      - name: latestEventId
+        type: string
+      - name: latestEventType
+        type: string
+      - name: latestResponseStatusCode
+        type: integer
+      - name: nextCursor
+        type: string
+
+  getWebhookEvent:
+    description: Read a webhook event (GET /air/webhooks/events/{id}, 200).
+    adapter: getWebhookEvent
+    tags: [account, webhooks]
+    inputs:
+      - name: eventId
+        type: string
+        default:
+          from: listWebhookDeliveries.latestEventId
+    outputs:
+      - name: eventId
+        type: string
+      - name: eventType
+        type: string
+      - name: liveMode
+        type: boolean
+
 workflows:
   - name: Find Offer
     description: Search, list the offers cheapest first, and read the Duffel Airways offer at its latest price

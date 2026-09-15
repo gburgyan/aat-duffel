@@ -1,0 +1,24 @@
+adapter: createCustomerUser
+protocol: http
+
+request:
+  method: POST
+  path: /identity/customer/users
+  headers:
+    Content-Type: application/json
+  body: |
+    {"data": {"email": "{{email}}", "given_name": "{{givenName}}", "family_name": "{{familyName}}"{{?phoneNumber}}, "phone_number": "{{phoneNumber}}"{{/phoneNumber}}{{?groupId}}, "group_id": "{{groupId}}"{{/groupId}}}}
+
+response:
+  extract:
+    customerUserId: data.id
+    email: data.email
+    givenName: data.given_name
+    familyName: data.family_name
+    phoneNumber:
+      path: data.phone_number
+      default: ""
+    groupId:
+      path: data.group.id
+      default: ""
+    liveMode: data.live_mode

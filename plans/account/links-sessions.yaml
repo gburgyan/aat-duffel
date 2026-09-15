@@ -1,0 +1,45 @@
+# A Duffel Links checkout session started with its four required fields and a traveller currency: Duffel
+# answers with a session URL on links.duffel.com, whose token no output keeps. A session with none of the
+# fields is refused with one validation_required error for each.
+metadata:
+  prompt: Start a Duffel Links session, and one without its required fields
+  graphVersion: "1.0.0"
+intent:
+  goal: empty
+  description: A Links session, and one refused without its required fields
+
+execution:
+  steps:
+    - id: session
+      node: createLinksSession
+      values:
+        reference: "aat-duffel-{{random 10}}"
+        successUrl: https://example.com/aat-duffel/success
+        failureUrl: https://example.com/aat-duffel/failure
+        abandonmentUrl: https://example.com/aat-duffel/abandoned
+        travellerCurrency: GBP
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: 'urlIssued == true && urlHost == "links.duffel.com"'
+
+    - id: empty
+      node: createLinksSession
+      dependsOn: [session]
+      isGoal: true
+      expectFailure:
+        status: [422]
+        description: reference and the three URLs are required
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: 'errors.#'
+            value: 4
+          - type: fieldEquals
+            path: errors.0.code
+            value: validation_required
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: validation_error
+            raw: true

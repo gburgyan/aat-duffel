@@ -1,0 +1,20 @@
+adapter: getCustomerUser
+protocol: http
+
+request:
+  method: GET
+  path: /identity/customer/users/{{customerUserId}}
+
+response:
+  extract:
+    customerUserId: data.id
+    email: data.email
+    givenName: data.given_name
+    familyName: data.family_name
+    phoneNumber:
+      path: data.phone_number
+      default: ""
+    groupId:
+      path: data.group.id
+      default: ""
+    liveMode: data.live_mode
