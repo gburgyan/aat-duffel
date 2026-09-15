@@ -9,8 +9,8 @@ request:
   body: |
     {
       "data": {
-        "intended_payment_methods": [{"type": "balance"}],
-        "intended_services": [{{#services}}{"id": "{{.id}}", "quantity": {{.quantity}}}{{/services}}]
+        "intended_payment_methods": [{"type": "balance"}]{{?services}},
+        "intended_services": [{{#services}}{"id": "{{.id}}", "quantity": {{.quantity}}}{{/services}}]{{/services}}
       }
     }
 

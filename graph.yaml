@@ -742,9 +742,8 @@ nodes:
           from: getOffer.offerId
       - name: services
         type: serviceSelection[]
-        default:
-          value: []
-        description: The services the order will buy, as a list of {id, quantity}; none by default
+        optional: true
+        description: The services the order will buy, as a list of {id, quantity}; without them the request sends no intended_services
     outputs:
       - name: offerId
         type: string
