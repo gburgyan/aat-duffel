@@ -1,0 +1,76 @@
+# Airlines, aircraft, and loyalty programmes, read-only: each list's first entry read back by its
+# ID, and a loyalty programme's airline read by the owner ID the programme names.
+metadata:
+  prompt: List airlines, aircraft, and loyalty programmes, and read one of each by ID
+  graphVersion: "1.0.0"
+intent:
+  goal: programmeAirline
+  description: Read back the first airline, aircraft, and loyalty programme by ID, and the airline behind the programme
+
+execution:
+  steps:
+    - id: airlines
+      node: listAirlines
+      values:
+        limit: 5
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: pageSize == 5 && nextCursor != ""
+
+    - id: airline
+      node: getAirline
+      description: The first airline, read by its arl_ ID
+      dependsOn: [airlines]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: id == "{{airlineId}}" && name != ""
+
+    - id: aircraftTypes
+      node: listAircraft
+      values:
+        limit: 5
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: pageSize == 5 && nextCursor != ""
+
+    - id: aircraft
+      node: getAircraft
+      description: The first aircraft type, read by its arc_ ID
+      dependsOn: [aircraftTypes]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: id == "{{aircraftId}}" && name != ""
+
+    - id: programmes
+      node: listLoyaltyProgrammes
+      values:
+        limit: 5
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: pageSize == 5 && nextCursor != ""
+
+    - id: programme
+      node: getLoyaltyProgramme
+      description: The first loyalty programme, read by its loy_ ID
+      dependsOn: [programmes]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: id == "{{loyaltyProgrammeId}}" && ownerAirlineId != ""
+
+    - id: programmeAirline
+      node: getAirline
+      description: The airline that runs the programme, read by the owner ID the programme names
+      dependsOn: [programme]
+      isGoal: true
+      values:
+        airlineId: {from: programme.ownerAirlineId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: id == "{{airlineId}}" && name != ""

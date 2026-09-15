@@ -1,0 +1,27 @@
+adapter: listAirports
+protocol: http
+
+request:
+  method: GET
+  path: /air/airports?limit={{limit}}{{?after}}&after={{after}}{{/after}}
+
+response:
+  extract:
+    airports:
+      path: data
+      fields:
+        id: id
+        iataCode: iata_code
+        icaoCode: icao_code
+        name: name
+        cityCode: iata_city_code
+        countryCode: iata_country_code
+        timeZone: time_zone
+    pageSize: 'data.#'
+    nextCursor:
+      path: meta.after
+      default: ""
+    rateLimitLimit:
+      header: ratelimit-limit
+    rateLimitRemaining:
+      header: ratelimit-remaining

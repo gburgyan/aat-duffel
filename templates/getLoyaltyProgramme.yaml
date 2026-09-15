@@ -1,0 +1,15 @@
+adapter: getLoyaltyProgramme
+protocol: http
+
+request:
+  method: GET
+  path: /air/loyalty_programmes/{{loyaltyProgrammeId}}
+
+response:
+  extract:
+    id: data.id
+    name: data.name
+    ownerAirlineId: data.owner_airline_id
+    alliance:
+      path: data.alliance
+      default: ""

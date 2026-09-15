@@ -1,0 +1,28 @@
+adapter: suggestPlaces
+protocol: http
+
+request:
+  method: GET
+  path: /places/suggestions?{{?query}}query={{query}}{{/query}}{{?lat}}&lat={{lat}}&lng={{lng}}&rad={{rad}}{{/lat}}
+
+response:
+  extract:
+    placeCount: 'data.#'
+    places:
+      path: data
+      fields:
+        id: id
+        type: type
+        iataCode: iata_code
+        name: name
+        cityId: city.id
+        cityCode: iata_city_code
+        countryCode: iata_country_code
+    airportCodes: 'data.#(type=="airport")#.iata_code'
+    cityCodes: 'data.#(type=="city")#.iata_code'
+    firstAirportCode:
+      path: 'data.#(type=="airport").iata_code'
+      default: ""
+    firstCityAirportCode:
+      path: 'data.#(type=="city").airports.0.iata_code'
+      default: ""

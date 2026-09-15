@@ -1,0 +1,20 @@
+adapter: getAirline
+protocol: http
+
+request:
+  method: GET
+  path: /air/airlines/{{airlineId}}
+
+response:
+  extract:
+    id: data.id
+    iataCode:
+      path: data.iata_code
+      default: ""
+    name: data.name
+    logoSymbolUrl:
+      path: data.logo_symbol_url
+      default: ""
+    conditionsOfCarriageUrl:
+      path: data.conditions_of_carriage_url
+      default: ""

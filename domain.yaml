@@ -1,0 +1,68 @@
+# What these plans have verified about Duffel's API in test mode. Each concept names the plans
+# that prove it; nothing here is copied from the docs without a run behind it.
+concepts:
+  authentication:
+    description: >-
+      Every call carries "Authorization: Bearer <token>" and "Duffel-Version: v2". A test token
+      starts with duffel_test_ and reaches only test-mode resources. The environments read it from
+      DUFFEL_ACCESS_TOKEN, the variable Duffel's own client libraries use.
+    applies_to: [error]
+    constraint: send Duffel-Version on every request, not only on writes
+
+  envelopes:
+    description: >-
+      A single resource comes back as {"data": {...}} and a list as {"data": [...], "meta": {...}},
+      except place suggestions, whose list has no meta. Errors come back as {"errors": [{type,
+      title, message, code}], "meta": {request_id, status}}; branch on code, which is stable.
+    applies_to: [error]
+
+  pagination:
+    description: >-
+      Lists page with cursors. limit takes 1 to 200 and after takes the previous page's meta.after,
+      an opaque string that is null on the last page. The reference lists (airports, cities,
+      airlines, aircraft, loyalty programmes) come in name order. Proven by
+      plans/reference/airports-and-cities.yaml.
+    applies_to: [limit, after, nextCursor, pageSize]
+    constraint: pass nextCursor back as after; never build a cursor
+
+  rateLimits:
+    description: >-
+      Every response reports the token's budget in lowercase headers: ratelimit-limit (4000 a
+      minute), ratelimit-remaining, and ratelimit-reset, an HTTP date at the end of the current
+      minute. Each also carries x-request-id, the ID to quote to Duffel support.
+    applies_to: [rateLimitLimit, rateLimitRemaining]
+
+  places:
+    description: >-
+      Place suggestions mix airports (arp_, type airport) and cities (cit_, type city). An airport
+      carries its city under city, and a city lists its airports; Heathrow is airport LHR in city
+      LON. A search by point takes lat, lng, and rad in metres. A query that matches nothing is 200
+      with an empty list, not 404. Proven by plans/reference/places.yaml.
+    applies_to: [query, lat, lng, rad, places, firstAirportCode, cityCodes]
+    constraint: take the airport code from an element whose type is airport
+
+  productAccess:
+    description: >-
+      Which Duffel products a test account reaches depends on what Duffel has enabled for it. On
+      the account these plans were built against, cards and 3-D Secure sessions answer 403
+      unavailable_feature, Stays and Cars answer 403 with a plain-text body, and Links sessions
+      are open. The plans cover what the account reaches.
+    applies_to: [error]
+
+types:
+  iataCode:
+    description: A three-letter IATA code of an airport or a city
+    format: string
+    validation: "^[A-Z]{3}$"
+
+  duffelId:
+    description: >-
+      A Duffel identifier: a prefix naming the resource, an underscore, and an opaque body.
+      Reference data uses arp_ (airport), cit_ (city), arl_ (airline), arc_ (aircraft), and loy_
+      (loyalty programme).
+    format: string
+    validation: "^[a-z]{3}_[A-Za-z0-9_]+$"
+
+  cursor:
+    description: An opaque pagination cursor from meta.after; "" when there is no next page
+    format: string

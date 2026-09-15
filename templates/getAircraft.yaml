@@ -1,0 +1,12 @@
+adapter: getAircraft
+protocol: http
+
+request:
+  method: GET
+  path: /air/aircraft/{{aircraftId}}
+
+response:
+  extract:
+    id: data.id
+    iataCode: data.iata_code
+    name: data.name

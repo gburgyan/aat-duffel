@@ -1,0 +1,66 @@
+# Place lookups, read-only: an airport by name, the same airport by coordinates, a city that
+# lists its airports, and a query that matches nothing. Plans that search for flights resolve
+# their airports the same way.
+metadata:
+  prompt: Look up airports and cities by name and by location
+  graphVersion: "1.0.0"
+intent:
+  goal: noMatch
+  description: Resolve Heathrow by name and by coordinates, find London as a city, and get an empty list for nonsense
+
+execution:
+  steps:
+    - id: byName
+      node: suggestPlaces
+      description: Heathrow by name is the airport LHR, in the city LON
+      values:
+        query: Heathrow
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: firstAirportCode == "LHR" && placeCount >= 1
+          - type: fieldEquals
+            path: 'data.#(iata_code=="LHR").city.iata_code'
+            value: LON
+            raw: true
+
+    - id: byPoint
+      node: suggestPlaces
+      description: Searching 20 km around Heathrow's runways finds Heathrow
+      values:
+        lat: 51.47
+        lng: -0.4543
+        rad: 20000
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: 'data.#(iata_code=="LHR").name'
+            value: Heathrow Airport
+            raw: true
+
+    - id: byCity
+      node: suggestPlaces
+      description: London by name includes the city LON, which lists its airports
+      values:
+        query: London
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: 'data.#(iata_code=="LON").type'
+            value: city
+            raw: true
+          - type: predicate
+            expr: firstCityAirportCode != ""
+
+    - id: noMatch
+      node: suggestPlaces
+      description: A query that matches nothing is still 200, with an empty list
+      isGoal: true
+      values:
+        query: zzqqxx
+      assertions:
+        mechanical:
+          - type: status
+            expect: 200
+          - type: predicate
+            expr: placeCount == 0 && firstAirportCode == ""

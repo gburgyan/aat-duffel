@@ -1,0 +1,75 @@
+# Airports and cities, read-only: two pages of airports joined by their cursor, Heathrow read by
+# the ID a place lookup returned, and London read by the city ID on that same suggestion.
+metadata:
+  prompt: Page through airports, and read Heathrow and London by ID
+  graphVersion: "1.0.0"
+intent:
+  goal: london
+  description: Page through airports with a cursor, then read an airport and its city by the IDs a place lookup returned
+
+execution:
+  steps:
+    - id: firstPage
+      node: listAirports
+      description: The first five airports, a cursor to the next page, and the token's rate limit
+      values:
+        limit: 5
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: pageSize == 5 && nextCursor != "" && rateLimitRemaining < rateLimitLimit
+
+    - id: secondPage
+      node: listAirports
+      description: The page after it, reached with the first page's cursor
+      dependsOn: [firstPage]
+      values:
+        limit: 5
+        after: {from: firstPage.nextCursor}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: pageSize == 5 && nextCursor != ""
+
+    - id: heathrow
+      node: suggestPlaces
+      description: Find Heathrow, for its airport and city IDs
+      values:
+        query: Heathrow
+
+    - id: airport
+      node: getAirport
+      description: Heathrow read by its arp_ ID
+      dependsOn: [heathrow]
+      values:
+        airportId:
+          from: heathrow.places
+          select:
+            strategy: match
+            field: id
+            filter: iataCode == "LHR"
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: iataCode == "LHR" && cityCode == "LON" && countryCode == "GB" && timeZone == "Europe/London"
+
+    - id: london
+      node: getCity
+      description: London read by the city ID on Heathrow's suggestion, with Heathrow among its airports
+      dependsOn: [heathrow]
+      isGoal: true
+      values:
+        cityId:
+          from: heathrow.places
+          select:
+            strategy: match
+            field: cityId
+            filter: iataCode == "LHR"
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: iataCode == "LON" && airportCount > 1
+          - type: fieldEquals
+            path: 'data.airports.#(iata_code=="LHR").name'
+            value: Heathrow Airport
+            raw: true

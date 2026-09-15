@@ -1,0 +1,22 @@
+adapter: getAirport
+protocol: http
+
+request:
+  method: GET
+  path: /air/airports/{{airportId}}
+
+response:
+  extract:
+    id: data.id
+    iataCode: data.iata_code
+    icaoCode:
+      path: data.icao_code
+      default: ""
+    name: data.name
+    cityCode:
+      path: data.iata_city_code
+      default: ""
+    countryCode: data.iata_country_code
+    timeZone: data.time_zone
+    latitude: data.latitude
+    longitude: data.longitude

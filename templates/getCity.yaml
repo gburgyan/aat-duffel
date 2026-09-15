@@ -1,0 +1,15 @@
+adapter: getCity
+protocol: http
+
+request:
+  method: GET
+  path: /air/cities/{{cityId}}
+
+response:
+  extract:
+    id: data.id
+    iataCode: data.iata_code
+    name: data.name
+    countryCode: data.iata_country_code
+    airportCodes: 'data.airports.#.iata_code'
+    airportCount: 'data.airports.#'

@@ -1,0 +1,13 @@
+name: duffel
+description: >-
+  The Duffel flights API in test mode: places and reference data, search, booking, changes,
+  cancellations, and the account features around them, each proven against the live test API
+tags: [travel, flights, booking, duffel, test-mode]
+graph: graph.yaml
+templates: templates/
+domain: domain.yaml
+plans: plans/
+environment: env.yaml
+defaultEnvironment: test
+archives: _output/runs
+traces: _output/traces

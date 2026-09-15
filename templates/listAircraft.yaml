@@ -1,0 +1,19 @@
+adapter: listAircraft
+protocol: http
+
+request:
+  method: GET
+  path: /air/aircraft?limit={{limit}}{{?after}}&after={{after}}{{/after}}
+
+response:
+  extract:
+    aircraft:
+      path: data
+      fields:
+        id: id
+        iataCode: iata_code
+        name: name
+    pageSize: 'data.#'
+    nextCursor:
+      path: meta.after
+      default: ""

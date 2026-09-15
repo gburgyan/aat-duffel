@@ -1,0 +1,415 @@
+version: "1.0.0"
+title: Duffel Flights API (test mode)
+description: >-
+  Duffel's flights API as it behaves in test mode, verified by running every plan in this project
+  against api.duffel.com. Every request carries a bearer token and Duffel-Version: v2; request and
+  success bodies are wrapped in {"data": ...}, and errors come back as {"errors": [{type, title,
+  message, code}], "meta": {request_id, status}}.
+
+nodes:
+  # --- Places and reference data ------------------------------------------------------
+
+  suggestPlaces:
+    description: >-
+      Look up airports and cities by name or near a point (GET /places/suggestions), answering 200
+      with a list, empty when nothing matches. Send query for a name or code, or lat, lng, and rad
+      (metres) for a point. An airport (arp_, type airport) carries its city under city; a city
+      (cit_, type city) lists its airports.
+    adapter: suggestPlaces
+    tags: [places, reference]
+    inputs:
+      - name: query
+        type: string
+        optional: true
+        description: A city, airport, or IATA code to match, such as Heathrow or JFK
+      - name: lat
+        type: float
+        optional: true
+        description: Latitude of the point to search near; send lng and rad with it
+      - name: lng
+        type: float
+        optional: true
+        description: Longitude of the point to search near
+      - name: rad
+        type: integer
+        optional: true
+        description: Search radius around the point, in metres
+    outputs:
+      - name: placeCount
+        type: integer
+        description: How many airports and cities matched
+      - name: places
+        type: place[]
+        description: The matches in Duffel's order, airports and cities mixed
+        elementFields:
+          - name: id
+            type: string
+          - name: type
+            type: enum[airport, city]
+          - name: iataCode
+            type: string
+          - name: name
+            type: string
+          - name: cityId
+            type: string
+          - name: cityCode
+            type: string
+          - name: countryCode
+            type: string
+      - name: airportCodes
+        type: string[]
+        description: The IATA codes of the matched airports, in order
+      - name: cityCodes
+        type: string[]
+        description: The IATA codes of the matched cities, in order
+      - name: firstAirportCode
+        type: string
+        display: Airport
+        description: The first matched airport's IATA code; "" when no airport matched
+      - name: firstCityAirportCode
+        type: string
+        description: The first airport of the first matched city; "" when no city matched
+    satisfies: [placeResolved]
+
+  listAirports:
+    description: >-
+      Page through every airport Duffel knows, in name order (GET /air/airports, 200). Pages use
+      cursors: limit is 1 to 200, and after takes the previous page's meta.after, which is null
+      on the last page. Every response reports the token's rate limit in ratelimit-* headers.
+    adapter: listAirports
+    tags: [reference, pagination]
+    inputs:
+      - name: limit
+        type: integer
+        default: 50
+        description: Airports per page, 1 to 200
+        constraints:
+          min: 1
+          max: 200
+      - name: after
+        type: string
+        optional: true
+        description: The cursor from the previous page's nextCursor; leave out for the first page
+    outputs:
+      - name: airports
+        type: airport[]
+        description: This page's airports
+        elementFields:
+          - name: id
+            type: string
+          - name: iataCode
+            type: string
+          - name: icaoCode
+            type: string
+          - name: name
+            type: string
+          - name: cityCode
+            type: string
+          - name: countryCode
+            type: string
+          - name: timeZone
+            type: string
+      - name: pageSize
+        type: integer
+        description: How many airports this page holds
+      - name: nextCursor
+        type: string
+        description: The cursor for the next page, from meta.after; "" on the last page
+      - name: rateLimitLimit
+        type: integer
+        description: Requests the token may make per minute, from the ratelimit-limit header
+      - name: rateLimitRemaining
+        type: integer
+        display: Rate limit left
+        description: Requests the token has left this minute, from the ratelimit-remaining header
+
+  getAirport:
+    description: >-
+      Read one airport by its arp_ ID (GET /air/airports/{id}, 200; an unknown ID is 404). Carries
+      IATA and ICAO codes, the IATA code of its city, the country, coordinates, and the IANA time
+      zone that departure and arrival times are local to.
+    adapter: getAirport
+    tags: [reference]
+    inputs:
+      - name: airportId
+        type: string
+        description: The airport's arp_ ID
+        default:
+          from: listAirports.airports
+          select:
+            strategy: first
+            field: id
+    outputs:
+      - name: id
+        type: string
+      - name: iataCode
+        type: string
+        display: Airport
+      - name: icaoCode
+        type: string
+        description: The ICAO code; "" when Duffel has none
+      - name: name
+        type: string
+      - name: cityCode
+        type: string
+        description: The IATA code of the airport's city, such as LON for Heathrow; "" when it has none
+      - name: countryCode
+        type: string
+      - name: timeZone
+        type: string
+      - name: latitude
+        type: float
+      - name: longitude
+        type: float
+
+  listCities:
+    description: >-
+      Page through the cities Duffel groups airports under (GET /air/cities, 200), with the same
+      cursor pagination as listAirports. Each city lists its airports.
+    adapter: listCities
+    tags: [reference, pagination]
+    inputs:
+      - name: limit
+        type: integer
+        default: 50
+        description: Cities per page, 1 to 200
+        constraints:
+          min: 1
+          max: 200
+      - name: after
+        type: string
+        optional: true
+        description: The cursor from the previous page's nextCursor
+    outputs:
+      - name: cities
+        type: city[]
+        elementFields:
+          - name: id
+            type: string
+          - name: iataCode
+            type: string
+          - name: name
+            type: string
+          - name: countryCode
+            type: string
+          - name: airportCount
+            type: integer
+      - name: pageSize
+        type: integer
+      - name: nextCursor
+        type: string
+        description: The cursor for the next page; "" on the last page
+
+  getCity:
+    description: >-
+      Read one city by its cit_ ID (GET /air/cities/{id}, 200), with the airports that serve it.
+    adapter: getCity
+    tags: [reference]
+    inputs:
+      - name: cityId
+        type: string
+        description: The city's cit_ ID
+        default:
+          from: listCities.cities
+          select:
+            strategy: first
+            field: id
+    outputs:
+      - name: id
+        type: string
+      - name: iataCode
+        type: string
+        display: City
+      - name: name
+        type: string
+      - name: countryCode
+        type: string
+      - name: airportCodes
+        type: string[]
+        description: The IATA codes of the city's airports
+      - name: airportCount
+        type: integer
+
+  listAirlines:
+    description: >-
+      Page through the airlines Duffel sells (GET /air/airlines, 200), with cursor pagination.
+      Test mode's own airline, Duffel Airways, has IATA code ZZ.
+    adapter: listAirlines
+    tags: [reference, pagination]
+    inputs:
+      - name: limit
+        type: integer
+        default: 50
+        description: Airlines per page, 1 to 200
+        constraints:
+          min: 1
+          max: 200
+      - name: after
+        type: string
+        optional: true
+        description: The cursor from the previous page's nextCursor
+    outputs:
+      - name: airlines
+        type: airline[]
+        elementFields:
+          - name: id
+            type: string
+          - name: iataCode
+            type: string
+          - name: name
+            type: string
+      - name: pageSize
+        type: integer
+      - name: nextCursor
+        type: string
+        description: The cursor for the next page; "" on the last page
+
+  getAirline:
+    description: >-
+      Read one airline by its arl_ ID (GET /air/airlines/{id}, 200), with its logos and its
+      conditions of carriage when Duffel has them.
+    adapter: getAirline
+    tags: [reference]
+    inputs:
+      - name: airlineId
+        type: string
+        description: The airline's arl_ ID
+        default:
+          from: listAirlines.airlines
+          select:
+            strategy: first
+            field: id
+    outputs:
+      - name: id
+        type: string
+      - name: iataCode
+        type: string
+        description: The IATA code; "" when the airline has none
+      - name: name
+        type: string
+        display: Airline
+      - name: logoSymbolUrl
+        type: string
+        description: The square logo's URL; "" when Duffel has none
+      - name: conditionsOfCarriageUrl
+        type: string
+        description: The airline's conditions of carriage; "" when Duffel has none
+
+  listAircraft:
+    description: >-
+      Page through the aircraft types segments are flown on (GET /air/aircraft, 200), with cursor
+      pagination.
+    adapter: listAircraft
+    tags: [reference, pagination]
+    inputs:
+      - name: limit
+        type: integer
+        default: 50
+        description: Aircraft per page, 1 to 200
+        constraints:
+          min: 1
+          max: 200
+      - name: after
+        type: string
+        optional: true
+        description: The cursor from the previous page's nextCursor
+    outputs:
+      - name: aircraft
+        type: aircraftType[]
+        elementFields:
+          - name: id
+            type: string
+          - name: iataCode
+            type: string
+          - name: name
+            type: string
+      - name: pageSize
+        type: integer
+      - name: nextCursor
+        type: string
+        description: The cursor for the next page; "" on the last page
+
+  getAircraft:
+    description: >-
+      Read one aircraft type by its arc_ ID (GET /air/aircraft/{id}, 200).
+    adapter: getAircraft
+    tags: [reference]
+    inputs:
+      - name: aircraftId
+        type: string
+        description: The aircraft type's arc_ ID
+        default:
+          from: listAircraft.aircraft
+          select:
+            strategy: first
+            field: id
+    outputs:
+      - name: id
+        type: string
+      - name: iataCode
+        type: string
+      - name: name
+        type: string
+        display: Aircraft
+
+  listLoyaltyProgrammes:
+    description: >-
+      Page through the airline loyalty programmes a passenger can book with (GET
+      /air/loyalty_programmes, 200), with cursor pagination. Each names the airline that runs it.
+    adapter: listLoyaltyProgrammes
+    tags: [reference, pagination, loyalty]
+    inputs:
+      - name: limit
+        type: integer
+        default: 50
+        description: Programmes per page, 1 to 200
+        constraints:
+          min: 1
+          max: 200
+      - name: after
+        type: string
+        optional: true
+        description: The cursor from the previous page's nextCursor
+    outputs:
+      - name: loyaltyProgrammes
+        type: loyaltyProgramme[]
+        elementFields:
+          - name: id
+            type: string
+          - name: name
+            type: string
+          - name: ownerAirlineId
+            type: string
+      - name: pageSize
+        type: integer
+      - name: nextCursor
+        type: string
+        description: The cursor for the next page; "" on the last page
+
+  getLoyaltyProgramme:
+    description: >-
+      Read one loyalty programme by its loy_ ID (GET /air/loyalty_programmes/{id}, 200), with the
+      arl_ ID of the airline that runs it and its alliance, if any.
+    adapter: getLoyaltyProgramme
+    tags: [reference, loyalty]
+    inputs:
+      - name: loyaltyProgrammeId
+        type: string
+        description: The programme's loy_ ID
+        default:
+          from: listLoyaltyProgrammes.loyaltyProgrammes
+          select:
+            strategy: first
+            field: id
+    outputs:
+      - name: id
+        type: string
+      - name: name
+        type: string
+        display: Programme
+      - name: ownerAirlineId
+        type: string
+        description: The arl_ ID of the airline that runs the programme
+      - name: alliance
+        type: string
+        description: The alliance the programme belongs to; "" when none

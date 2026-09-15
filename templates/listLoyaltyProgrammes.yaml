@@ -1,0 +1,19 @@
+adapter: listLoyaltyProgrammes
+protocol: http
+
+request:
+  method: GET
+  path: /air/loyalty_programmes?limit={{limit}}{{?after}}&after={{after}}{{/after}}
+
+response:
+  extract:
+    loyaltyProgrammes:
+      path: data
+      fields:
+        id: id
+        name: name
+        ownerAirlineId: owner_airline_id
+    pageSize: 'data.#'
+    nextCursor:
+      path: meta.after
+      default: ""
