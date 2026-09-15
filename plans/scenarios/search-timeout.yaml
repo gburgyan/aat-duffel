@@ -1,0 +1,30 @@
+# Duffel's STN to LHR test route simulates a search that times out: 504 gateway_timeout_error, an
+# api_error, which Duffel's docs say to retry later.
+metadata:
+  prompt: Search Duffel's timeout test route
+  graphVersion: "1.0.0"
+intent:
+  goal: search
+  description: A search that times out answers 504 gateway_timeout_error
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      isGoal: true
+      values:
+        origin: STN
+        destination: LHR
+      expectFailure:
+        status: [504]
+        description: The test route's search times out
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: gateway_timeout_error
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: api_error
+            raw: true

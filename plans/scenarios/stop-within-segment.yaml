@@ -1,0 +1,20 @@
+# Duffel's DXB to AMS test route returns a flight that stops on the way without changing flight
+# number: one segment, with a stop recorded inside it.
+kind: recipe
+metadata:
+  prompt: Search Duffel's stop-within-segment test route
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: The Duffel Airways offer's first flight has a stop
+overrides:
+  values:
+    search.origin: DXB
+    search.destination: AMS
+  assertions:
+    offer:
+      - type: predicate
+        expr: firstSliceSegmentCount == 1 && firstSegmentStopCount == 1
+      - type: fieldExists
+        path: data.slices.0.segments.0.stops.0.airport.iata_code
+        raw: true

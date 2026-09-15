@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Offers</title>
+<style>
+  body {
+    margin: 0;
+    padding: 12px;
+    background: var(--color-bg, #0f1117);
+    color: var(--color-text, #e4e4e7);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    font-size: 13px;
+  }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-bottom: 10px; }
+  h1 { margin: 0; font-size: 15px; }
+  .muted { color: var(--color-text-secondary, #a1a1aa); }
+  .airlines { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip {
+    padding: 2px 8px;
+    border: 1px solid var(--color-border, #2a2d3a);
+    border-radius: 999px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .chip.zz, tr.zz td:first-child { border-color: var(--color-primary, #60a5fa); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 5px 8px 5px 0; text-align: left; vertical-align: top; }
+  th {
+    border-bottom: 1px solid var(--color-border, #2a2d3a);
+    color: var(--color-text-secondary, #a1a1aa);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid var(--color-border, #2a2d3a); }
+  tr.zz { background: var(--color-surface, #171a23); }
+  tr.zz td:first-child { border-left: 3px solid var(--color-primary, #60a5fa); padding-left: 6px; }
+  .num { text-align: right; font-family: var(--font-mono, ui-monospace, monospace); white-space: nowrap; }
+  .code { font-family: var(--font-mono, ui-monospace, monospace); }
+  .hold { color: var(--color-success, #4ade80); }
+  .instant { color: var(--color-warning, #fbbf24); }
+</style>
+</head>
+<body>
+<div id="root"><p class="muted">Waiting for data…</p></div>
+<script>
+(function () {
+  'use strict';
+
+  var MAX_ROWS = 60;
+
+  // Build nodes with textContent only: the body comes from the API under test.
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (key) {
+      if (key === 'text') {
+        node.textContent = attrs[key];
+      } else {
+        node.setAttribute(key, attrs[key]);
+      }
+    });
+    (children || []).forEach(function (child) {
+      if (child) node.appendChild(child);
+    });
+    return node;
+  }
+
+  function money(amount, currency) {
+    var value = parseFloat(amount);
+    if (isNaN(value)) return '';
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency }).format(value);
+    } catch (e) {
+      return value.toFixed(2) + ' ' + currency;
+    }
+  }
+
+  // ISO 8601 durations such as PT7H58M, shown as 7h 58m.
+  function duration(iso) {
+    var m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?/.exec(iso || '');
+    if (!m) return '';
+    var hours = parseInt(m[1] || '0', 10) * 24 + parseInt(m[2] || '0', 10);
+    return (hours ? hours + 'h ' : '') + (m[3] ? parseInt(m[3], 10) + 'm' : '');
+  }
+
+  function sliceText(slice) {
+    var segments = slice.segments || [];
+    var stops = segments.length - 1;
+    segments.forEach(function (segment) { stops += (segment.stops || []).length; });
+    var route = ((slice.origin || {}).iata_code || '?') + ' → ' + ((slice.destination || {}).iata_code || '?');
+    var shape = stops === 0 ? 'direct' : stops + (stops === 1 ? ' stop' : ' stops');
+    return route + ' · ' + shape + ' · ' + duration(slice.duration);
+  }
+
+  function render(body) {
+    var root = document.getElementById('root');
+    root.textContent = '';
+    var data = body && body.data;
+    var offers = Array.isArray(data) ? data : (data && data.offers) || [];
+    var batch = data && !Array.isArray(data) && typeof data.remaining_batches === 'number' ? data : null;
+
+    var sorted = offers.slice().sort(function (a, b) {
+      return parseFloat(a.total_amount) - parseFloat(b.total_amount);
+    });
+
+    var byOwner = {};
+    sorted.forEach(function (offer) {
+      var owner = offer.owner || {};
+      var code = owner.iata_code || '?';
+      if (!byOwner[code]) byOwner[code] = { name: owner.name || code, count: 0, cheapest: offer };
+      byOwner[code].count++;
+    });
+    var owners = Object.keys(byOwner).sort(function (a, b) {
+      return parseFloat(byOwner[a].cheapest.total_amount) - parseFloat(byOwner[b].cheapest.total_amount);
+    });
+
+    var summary = offers.length + (offers.length === 1 ? ' offer' : ' offers') + ' from ' +
+      owners.length + (owners.length === 1 ? ' airline' : ' airlines');
+    var headerParts = [el('h1', { text: 'Offers' }), el('span', { 'class': 'muted', text: summary })];
+    if (batch) {
+      headerParts.push(el('span', { 'class': 'chip', text: 'batches left: ' + batch.remaining_batches + ' of ' + batch.total_batches }));
+    }
+    root.appendChild(el('header', null, headerParts));
+
+    if (offers.length === 0) {
+      root.appendChild(el('p', { 'class': 'muted', text: 'No offers in this response.' }));
+      return;
+    }
+
+    root.appendChild(el('div', { 'class': 'airlines' }, owners.map(function (code) {
+      var entry = byOwner[code];
+      return el('span', { 'class': 'chip' + (code === 'ZZ' ? ' zz' : ''),
+        text: entry.name + ' (' + code + ') · ' + entry.count + ' from ' + money(entry.cheapest.total_amount, entry.cheapest.total_currency) });
+    })));
+
+    var rows = el('tbody');
+    sorted.slice(0, MAX_ROWS).forEach(function (offer) {
+      var owner = offer.owner || {};
+      var firstSegment = ((offer.slices || [])[0] || {}).segments || [];
+      var cabin = (((firstSegment[0] || {}).passengers || [])[0] || {}).cabin_class_marketing_name || '';
+      var brand = ((offer.slices || [])[0] || {}).fare_brand_name || '';
+      var payment = offer.payment_requirements || {};
+      rows.appendChild(el('tr', { 'class': owner.iata_code === 'ZZ' ? 'zz' : '' }, [
+        el('td', null, [el('span', { 'class': 'code', text: owner.iata_code || '?' }), el('div', { 'class': 'muted', text: owner.name || '' })]),
+        el('td', null, (offer.slices || []).map(function (slice) { return el('div', { text: sliceText(slice) }); })),
+        el('td', { text: [cabin, brand].filter(Boolean).join(' · ') }),
+        el('td', { 'class': payment.requires_instant_payment ? 'instant' : 'hold',
+          text: payment.requires_instant_payment ? 'pay now' : 'can hold' }),
+        el('td', { 'class': 'num', text: money(offer.total_amount, offer.total_currency) })
+      ]));
+    });
+
+    root.appendChild(el('table', null, [
+      el('thead', null, [el('tr', null, [
+        el('th', { text: 'Airline' }),
+        el('th', { text: 'Journey' }),
+        el('th', { text: 'Cabin · fare' }),
+        el('th', { text: 'Payment' }),
+        el('th', { 'class': 'num', text: 'Total' })
+      ])]),
+      rows
+    ]));
+    if (sorted.length > MAX_ROWS) {
+      root.appendChild(el('p', { 'class': 'muted', text: 'Showing the ' + MAX_ROWS + ' cheapest of ' + sorted.length + '.' }));
+    }
+  }
+
+  window.addEventListener('message', function (event) {
+    var msg = event.data;
+    if (!msg || msg.type !== 'aat-visualizer-data') return;
+    Object.keys(msg.theme || {}).forEach(function (name) {
+      document.documentElement.style.setProperty(name, msg.theme[name]);
+    });
+    render(msg.body);
+    requestAnimationFrame(function () {
+      parent.postMessage({ type: 'aat-visualizer-resize', height: document.documentElement.scrollHeight }, '*');
+    });
+  });
+
+  parent.postMessage({ type: 'aat-visualizer-ready' }, '*');
+})();
+</script>
+</body>
+</html>

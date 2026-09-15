@@ -1,0 +1,17 @@
+# Duffel's LHR to DXB test route returns offers with more than one segment: the Duffel Airways offer
+# connects.
+kind: recipe
+metadata:
+  prompt: Search Duffel's multi-segment test route
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: The Duffel Airways offer's first slice has two flights
+overrides:
+  values:
+    search.origin: LHR
+    search.destination: DXB
+  assertions:
+    offer:
+      - type: predicate
+        expr: firstSliceSegmentCount == 2

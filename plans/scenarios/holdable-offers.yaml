@@ -1,0 +1,19 @@
+# Duffel's JFK to EWR test route returns only offers that can be held and paid later.
+kind: recipe
+metadata:
+  prompt: Search Duffel's holdable-offers test route
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: Every offer on the page can be held
+overrides:
+  values:
+    search.origin: JFK
+    search.destination: EWR
+  assertions:
+    offers:
+      - type: predicate
+        expr: pageSize > 0 && instantPaymentCount == 0
+    offer:
+      - type: predicate
+        expr: requiresInstantPayment == false && paymentRequiredBy != ""

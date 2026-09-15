@@ -1,0 +1,42 @@
+intent:
+  goal: offer
+  description: Search, list the offers cheapest first, and read the Duffel Airways offer at its latest price
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      description: Search for flights; a test token never reaches live offers
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      description: A page of offers, cheapest first
+      values:
+        offerRequestId: {from: search.offerRequestId}
+        limit: 200
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      isGoal: true
+      description: The Duffel Airways offer at its latest price, with the services it sells
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: ownerCode == "ZZ" && liveMode == false && offerId == "{{offerId}}"

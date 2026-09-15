@@ -1,0 +1,51 @@
+# A batch search: the offers arrive a supplier at a time, so the read repeats until no batches remain,
+# gathering the Duffel Airways offers and counting every offer on the way.
+metadata:
+  prompt: Run a batch search and collect the Duffel Airways offers as the batches arrive
+  graphVersion: "1.0.0"
+intent:
+  goal: offer
+  description: Poll a batch search to the end, then read the Duffel Airways offer it found
+
+execution:
+  steps:
+    - id: start
+      node: createBatchOfferRequest
+      description: Start the batch search; no batch has arrived yet
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false && totalBatches > 0 && remainingBatches == totalBatches
+
+    - id: batches
+      node: getBatchOfferRequest
+      description: Read the batches as they arrive, until none remain
+      dependsOn: [start]
+      values:
+        batchOfferRequestId: {from: start.batchOfferRequestId}
+      repeat:
+        until: remainingBatches == 0
+        collect: [zzOffers, zzOfferCount, offerCount]
+        interval: 500ms
+        max: 30
+        timeout: 50s
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount >= 1 && offerCount > zzOfferCount
+
+    - id: offer
+      node: getOffer
+      description: The Duffel Airways offer the batches brought, at its latest price
+      dependsOn: [batches]
+      isGoal: true
+      values:
+        offerId:
+          from: batches.zzOffers
+          select:
+            strategy: first
+            field: id
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: ownerCode == "ZZ" && offerId == "{{offerId}}"

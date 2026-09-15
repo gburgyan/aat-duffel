@@ -1,0 +1,13 @@
+# Duffel's test loyalty account (Amelia Earhart, Duffel Airways, 1234567890) attached to an offer's
+# passenger before booking. The offer read again carries the account, at 10% off.
+kind: recipe
+metadata:
+  prompt: Attach the test loyalty account to the Duffel Airways offer and read its member price
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: One adult, economy, direct flights, with the test loyalty account
+  addons: [Loyalty Account]
+overrides:
+  values:
+    offers.maxConnections: 0

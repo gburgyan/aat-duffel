@@ -1,0 +1,24 @@
+adapter: priceOffer
+protocol: http
+
+request:
+  method: POST
+  path: /air/offers/{{offerId}}/actions/price
+  headers:
+    Content-Type: application/json
+  body: |
+    {
+      "data": {
+        "intended_payment_methods": [{"type": "balance"}],
+        "intended_services": [{{#services}}{"id": "{{.id}}", "quantity": {{.quantity}}}{{/services}}]
+      }
+    }
+
+response:
+  extract:
+    offerId: data.id
+    totalAmount: data.total_amount
+    totalCurrency: data.total_currency
+    intendedServiceCount:
+      path: 'data.intended_services.#'
+      default: 0

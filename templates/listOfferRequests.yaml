@@ -1,0 +1,19 @@
+adapter: listOfferRequests
+protocol: http
+
+request:
+  method: GET
+  path: /air/offer_requests?limit={{limit}}{{?after}}&after={{after}}{{/after}}
+
+response:
+  extract:
+    offerRequests:
+      path: data
+      fields:
+        id: id
+        cabinClass: cabin_class
+        createdAt: created_at
+    pageSize: 'data.#'
+    nextCursor:
+      path: meta.after
+      default: ""

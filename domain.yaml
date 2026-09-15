@@ -41,6 +41,62 @@ concepts:
     applies_to: [query, lat, lng, rad, places, firstAirportCode, cityCodes]
     constraint: take the airport code from an element whose type is airport
 
+  searchSize:
+    description: >-
+      A search can return hundreds of offers from many airlines (229 for one adult from LHR to JFK,
+      1.5 MB with return_offers=true). The plans search with return_offers=false and page the offers
+      with listOffers, cheapest first, or use a batch search, whose offers arrive a supplier at a time.
+      Proven by plans/search/one-way.yaml and plans/search/batch.yaml.
+    applies_to: [offerRequestId, offers, pageSize]
+    constraint: don't inline offers in the search response; page them
+
+  duffelAirways:
+    description: >-
+      In test mode the searches return offers from many airline sandboxes, but only Duffel Airways,
+      owner ZZ, books reliably, so every plan picks the offer whose ownerCode is ZZ. A Duffel Airways
+      offer can always be held (payment due about three days later). Whether it allows a change or a
+      refund before departure varies from search to search: twelve Basic fares from LHR to JFK showed all
+      four combinations. An allowed one states a 40.00 penalty, and a refused one has no penalty, so read
+      change_before_departure and refund_before_departure rather than assume them. It includes a checked
+      and a carry-on bag, sells one extra 23 kg bag at 20.00, and has an
+      economy seat map of 192 seats with 76 for sale at 20.00. It sells no upsell offers (422
+      unsupported_action). Proven by the plans under plans/search/.
+    applies_to: [ownerCode, offerId, services, seats]
+    constraint: select the offer whose ownerCode is ZZ, never the first or the cheapest
+
+  offerLifetime:
+    description: >-
+      An offer expires about 30 minutes after its search, and reading one that is gone is 422
+      offer_no_longer_available. Its passenger IDs are the pas_ IDs of the offer request, and an order
+      names them. The price can move after the search; read the offer or price it before paying.
+    applies_to: [offerId, passengers, expiresAt, totalAmount]
+
+  batchSearch:
+    description: >-
+      A batch search starts with total_batches equal to remaining_batches. Each read of it returns only
+      the offers of the batches that arrived since the last read, and remaining_batches falls unevenly
+      (6, 2, 1, 0 in one run); Duffel Airways arrives in the first. The search expires a minute after it
+      starts. Proven by plans/search/batch.yaml, which repeats the read and collects the offers.
+    applies_to: [batchOfferRequestId, remainingBatches, zzOffers]
+    constraint: repeat the read until remainingBatches is 0, collecting offers from every read
+
+  loyaltyAccounts:
+    description: >-
+      A passenger's loyalty programme accounts are attached to the offer before booking, with PATCH on
+      the offer's passenger. Duffel's test account (Amelia Earhart, airline ZZ, number 1234567890) takes
+      10% off a Duffel Airways offer: 229.05 became 206.15. Proven by plans/search/loyalty.yaml.
+    applies_to: [passengerId, loyaltyAccountNumber]
+
+  testRoutes:
+    description: >-
+      Duffel's test mode simulates situations on fixed one-way routes: PVD to RAI has no offers, JFK to
+      EWR only holdable ones, LHR to DXB connecting flights, DXB to AMS a stop within a flight, BTS to MRU
+      no baggage, BTS to ABV no extra services, STN to LHR a search timeout (504
+      gateway_timeout_error), LGW to LHR an offer gone by the time it's read (422
+      offer_no_longer_available), and LHR to STN a price that rises 10.00 with every read. Proven by the
+      plans under plans/scenarios/.
+    applies_to: [origin, destination]
+
   productAccess:
     description: >-
       Which Duffel products a test account reaches depends on what Duffel has enabled for it. On

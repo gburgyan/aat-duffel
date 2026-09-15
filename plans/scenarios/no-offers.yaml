@@ -1,0 +1,30 @@
+# Duffel's PVD to RAI test route has no flights: the search succeeds, and its offers page is empty.
+metadata:
+  prompt: Search Duffel's no-offers test route
+  graphVersion: "1.0.0"
+intent:
+  goal: offers
+  description: A search on a route with no flights returns no offers
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        origin: PVD
+        destination: RAI
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      isGoal: true
+      values:
+        offerRequestId: {from: search.offerRequestId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: pageSize == 0 && nextCursor == "" && cheapestTotalAmount == ""

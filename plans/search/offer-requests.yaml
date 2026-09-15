@@ -1,0 +1,43 @@
+# Offer requests read back: a search on the small JFK to EWR test route, read by ID with its offers
+# inlined, and the account's recent offer requests paged by cursor.
+metadata:
+  prompt: Create an offer request, read it back, and list recent offer requests
+  graphVersion: "1.0.0"
+intent:
+  goal: recent
+  description: Read an offer request by ID and page through the account's offer requests
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        origin: JFK
+        destination: EWR
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: liveMode == false && sliceCount == 1
+
+    - id: read
+      node: getOfferRequest
+      description: The offer request by its orq_ ID, with every offer inlined
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: offerRequestId == "{{offerRequestId}}" && offerCount > 0 && sliceCount == 1
+
+    - id: recent
+      node: listOfferRequests
+      description: A page of the account's offer requests, without their offers
+      dependsOn: [read]
+      isGoal: true
+      values:
+        limit: 5
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: pageSize == 5 && nextCursor != ""

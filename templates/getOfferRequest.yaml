@@ -1,0 +1,16 @@
+adapter: getOfferRequest
+protocol: http
+
+request:
+  method: GET
+  path: /air/offer_requests/{{offerRequestId}}
+
+response:
+  extract:
+    offerRequestId: data.id
+    cabinClass: data.cabin_class
+    sliceCount: 'data.slices.#'
+    passengerCount: 'data.passengers.#'
+    offerCount:
+      path: 'data.offers.#'
+      default: 0

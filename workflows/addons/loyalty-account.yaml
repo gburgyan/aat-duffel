@@ -1,0 +1,33 @@
+execution:
+  steps:
+    - id: member
+      node: updateOfferPassenger
+      description: Name the passenger and attach Duffel's test loyalty account
+      values:
+        offerId: AUTOWIRE
+        passengerId:
+          from: offer.passengers
+          select:
+            strategy: first
+            field: id
+        givenName: Amelia
+        familyName: Earhart
+        loyaltyAirline: ZZ
+        loyaltyAccountNumber: "1234567890"
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: loyaltyAccountCount == 1 && loyaltyAccountNumber == "1234567890" && familyName == "Earhart"
+
+    - id: memberPrice
+      node: getOffer
+      dependsOn: [member]
+      description: The offer read again at the member price, 10% off for this account
+      values:
+        offerId: AUTOWIRE
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: data.passengers.0.loyalty_programme_accounts.0.account_number
+            value: "1234567890"
+            raw: true

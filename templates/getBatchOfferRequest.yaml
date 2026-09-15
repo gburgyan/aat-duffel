@@ -1,0 +1,25 @@
+adapter: getBatchOfferRequest
+protocol: http
+
+request:
+  method: GET
+  path: /air/batch_offer_requests/{{batchOfferRequestId}}
+
+response:
+  extract:
+    remainingBatches: data.remaining_batches
+    totalBatches: data.total_batches
+    offerCount:
+      path: 'data.offers.#'
+      default: 0
+    zzOffers:
+      path: 'data.offers.#(owner.iata_code=="ZZ")#'
+      default: []
+      fields:
+        id: id
+        ownerCode: owner.iata_code
+        totalAmount: total_amount
+        totalCurrency: total_currency
+    zzOfferCount:
+      path: 'data.offers.#(owner.iata_code=="ZZ")#|#'
+      default: 0

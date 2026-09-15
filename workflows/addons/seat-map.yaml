@@ -1,0 +1,11 @@
+execution:
+  steps:
+    - id: seats
+      node: getSeatMaps
+      description: One seat map per segment, and the seats for sale to each passenger
+      values:
+        offerId: AUTOWIRE
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: seatMapCount >= 1 && availableSeatCount > restrictedSeatCount

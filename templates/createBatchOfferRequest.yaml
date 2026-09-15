@@ -1,0 +1,26 @@
+adapter: createBatchOfferRequest
+protocol: http
+
+request:
+  method: POST
+  path: /air/batch_offer_requests
+  headers:
+    Content-Type: application/json
+  body: |
+    {
+      "data": {
+        "slices": [
+          {"origin": "{{origin}}", "destination": "{{destination}}", "departure_date": "{{departureDate}}"}{{?returnDate}},
+          {"origin": "{{destination}}", "destination": "{{origin}}", "departure_date": "{{returnDate}}"}{{/returnDate}}
+        ],
+        "passengers": [{{#passengerAges}}{"age": {{.}}}{{/passengerAges}}],
+        "cabin_class": "{{cabinClass}}"
+      }
+    }
+
+response:
+  extract:
+    batchOfferRequestId: data.id
+    liveMode: data.live_mode
+    totalBatches: data.total_batches
+    remainingBatches: data.remaining_batches

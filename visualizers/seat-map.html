@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Seat map</title>
+<style>
+  body {
+    margin: 0;
+    padding: 12px;
+    background: var(--color-bg, #0f1117);
+    color: var(--color-text, #e4e4e7);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    font-size: 13px;
+  }
+  h1 { margin: 0 0 4px; font-size: 15px; }
+  h2 { margin: 16px 0 6px; font-size: 13px; font-weight: 600; }
+  .muted { color: var(--color-text-secondary, #a1a1aa); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 4px; font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .cabin { display: inline-block; padding: 10px 14px; border: 1px solid var(--color-border, #2a2d3a); border-radius: 18px 18px 8px 8px; }
+  .row { display: flex; align-items: center; gap: 14px; margin: 2px 0; }
+  .row-label { width: 22px; text-align: right; font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; }
+  .section { display: flex; gap: 3px; }
+  .cell {
+    width: 24px;
+    height: 22px;
+    border-radius: 5px 5px 3px 3px;
+    border: 1px solid var(--color-border, #2a2d3a);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    box-sizing: border-box;
+  }
+  .seat.sold { background: transparent; color: var(--color-text-secondary, #a1a1aa); opacity: 0.45; }
+  .seat.open { background: color-mix(in srgb, var(--color-success, #4ade80) 30%, transparent); border-color: var(--color-success, #4ade80); }
+  .seat.restricted { background: color-mix(in srgb, var(--color-warning, #fbbf24) 30%, transparent); border-color: var(--color-warning, #fbbf24); }
+  .facility { border-style: dashed; color: var(--color-text-secondary, #a1a1aa); font-size: 9px; }
+  .blank { border-color: transparent; }
+  .exit { color: var(--color-danger, #f87171); font-size: 9px; font-weight: 600; border-color: transparent; }
+</style>
+</head>
+<body>
+<div id="root"><p class="muted">Waiting for data…</p></div>
+<script>
+(function () {
+  'use strict';
+
+  // Build nodes with textContent only: the body comes from the API under test.
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (key) {
+      if (key === 'text') {
+        node.textContent = attrs[key];
+      } else {
+        node.setAttribute(key, attrs[key]);
+      }
+    });
+    (children || []).forEach(function (child) {
+      if (child) node.appendChild(child);
+    });
+    return node;
+  }
+
+  var FACILITY_LABELS = { lavatory: 'WC', galley: 'G', bassinet: 'BB', closet: 'CL', stairs: 'ST' };
+
+  function seatCell(element, stats) {
+    var services = element.available_services || [];
+    var disclosures = element.disclosures || [];
+    var letter = (element.designator || '').replace(/^\d+/, '');
+    var kind = services.length === 0 ? 'sold' : (disclosures.length ? 'restricted' : 'open');
+    stats[kind]++;
+    var title = element.designator || 'seat';
+    if (services.length) {
+      title += ' · ' + services.map(function (s) { return s.total_amount + ' ' + s.total_currency; })
+        .filter(function (v, i, all) { return all.indexOf(v) === i; }).join(', ');
+      services.forEach(function (s) { stats.prices[s.total_amount + ' ' + s.total_currency] = true; });
+    } else {
+      title += ' · not for sale';
+    }
+    if (disclosures.length) title += ' · ' + disclosures.join('; ');
+    return el('div', { 'class': 'cell seat ' + kind, title: title, text: letter });
+  }
+
+  function elementCell(element, stats) {
+    switch (element.type) {
+      case 'seat': return seatCell(element, stats);
+      case 'exit_row': return el('div', { 'class': 'cell exit', title: 'Exit row', text: 'EXIT' });
+      case 'empty': return el('div', { 'class': 'cell blank' });
+      default:
+        return el('div', { 'class': 'cell facility', title: element.type,
+          text: FACILITY_LABELS[element.type] || (element.type || '?').slice(0, 2).toUpperCase() });
+    }
+  }
+
+  function rowNumber(row) {
+    var label = '';
+    (row.sections || []).some(function (section) {
+      return (section.elements || []).some(function (element) {
+        var m = /^(\d+)/.exec(element.designator || '');
+        if (m) { label = m[1]; return true; }
+        return false;
+      });
+    });
+    return label;
+  }
+
+  function render(body) {
+    var root = document.getElementById('root');
+    root.textContent = '';
+    var maps = (body && Array.isArray(body.data)) ? body.data : [];
+    if (maps.length === 0) {
+      root.appendChild(el('p', { 'class': 'muted', text: 'No seat maps in this response.' }));
+      return;
+    }
+    var stats = { open: 0, restricted: 0, sold: 0, prices: {} };
+    var sections = [];
+    maps.forEach(function (map, index) {
+      sections.push(el('h2', { text: 'Segment ' + (index + 1) + (map.segment_id ? ' · ' + map.segment_id : '') }));
+      (map.cabins || []).forEach(function (cabin) {
+        var rows = (cabin.rows || []).map(function (row) {
+          return el('div', { 'class': 'row' }, [el('div', { 'class': 'row-label muted', text: rowNumber(row) })]
+            .concat((row.sections || []).map(function (section) {
+              return el('div', { 'class': 'section' }, (section.elements || []).map(function (element) {
+                return elementCell(element, stats);
+              }));
+            })));
+        });
+        sections.push(el('div', { 'class': 'muted', text: (cabin.cabin_class || 'cabin').replace(/_/g, ' ') + ' · deck ' + (cabin.deck || 0) + ' · ' + (cabin.rows || []).length + ' rows' }));
+        sections.push(el('div', { 'class': 'cabin' }, rows));
+      });
+    });
+
+    var prices = Object.keys(stats.prices);
+    root.appendChild(el('h1', { text: 'Seat map' }));
+    root.appendChild(el('div', { 'class': 'muted', text: maps.length + (maps.length === 1 ? ' segment' : ' segments') + ' · ' +
+      (stats.open + stats.restricted) + ' seats for sale' + (prices.length ? ' at ' + prices.join(', ') : '') }));
+    root.appendChild(el('div', { 'class': 'legend' }, [
+      el('span', null, [el('span', { 'class': 'cell seat open' }), el('span', { text: 'for sale (' + stats.open + ')' })]),
+      el('span', null, [el('span', { 'class': 'cell seat restricted' }), el('span', { text: 'for sale, with a disclosure (' + stats.restricted + ')' })]),
+      el('span', null, [el('span', { 'class': 'cell seat sold' }), el('span', { text: 'not for sale (' + stats.sold + ')' })])
+    ]));
+    sections.forEach(function (node) { root.appendChild(node); });
+  }
+
+  window.addEventListener('message', function (event) {
+    var msg = event.data;
+    if (!msg || msg.type !== 'aat-visualizer-data') return;
+    Object.keys(msg.theme || {}).forEach(function (name) {
+      document.documentElement.style.setProperty(name, msg.theme[name]);
+    });
+    render(msg.body);
+    requestAnimationFrame(function () {
+      parent.postMessage({ type: 'aat-visualizer-resize', height: document.documentElement.scrollHeight }, '*');
+    });
+  });
+
+  parent.postMessage({ type: 'aat-visualizer-ready' }, '*');
+})();
+</script>
+</body>
+</html>

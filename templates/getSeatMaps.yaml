@@ -1,0 +1,44 @@
+adapter: getSeatMaps
+protocol: http
+
+request:
+  method: GET
+  path: /air/seat_maps?offer_id={{offerId}}
+
+response:
+  extract:
+    seatMapCount: 'data.#'
+  # Seats sit four levels down (maps, cabins, rows, sections, elements), and a seat is sold separately
+  # to each passenger, so flatten them into one entry per seat per passenger that a selection can
+  # filter by passengerId, segmentId, and restricted.
+  transform: |
+    local seats, restricted = {}, 0
+    for _, map in ipairs(json_path("data") or {}) do
+      for _, cabin in ipairs(map.cabins or {}) do
+        for _, row in ipairs(cabin.rows or {}) do
+          for _, section in ipairs(row.sections or {}) do
+            for _, element in ipairs(section.elements or {}) do
+              if element.type == "seat" then
+                local isRestricted = element.disclosures ~= nil and #element.disclosures > 0
+                for _, service in ipairs(element.available_services or {}) do
+                  table.insert(seats, {
+                    designator = element.designator,
+                    segmentId = map.segment_id,
+                    passengerId = service.passenger_id,
+                    serviceId = service.id,
+                    amount = service.total_amount,
+                    currency = service.total_currency,
+                    restricted = isRestricted,
+                  })
+                  if isRestricted then restricted = restricted + 1 end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    outputs.seats = seats
+    outputs.availableSeatCount = #seats
+    outputs.restrictedSeatCount = restricted
+    return outputs

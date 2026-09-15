@@ -6,7 +6,9 @@ tags: [travel, flights, booking, duffel, test-mode]
 graph: graph.yaml
 templates: templates/
 domain: domain.yaml
+workflows: workflows/
 plans: plans/
+visualizers: visualizers/
 environment: env.yaml
 defaultEnvironment: test
 archives: _output/runs

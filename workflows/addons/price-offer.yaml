@@ -1,0 +1,11 @@
+execution:
+  steps:
+    - id: priced
+      node: priceOffer
+      description: The offer priced for a balance payment, which adds no surcharge
+      values:
+        offerId: AUTOWIRE
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: offerId == "{{offerId}}" && totalAmount != "" && intendedServiceCount == 0

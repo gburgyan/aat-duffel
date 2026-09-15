@@ -1,0 +1,17 @@
+# Duffel's BTS to ABV test route returns an offer that sells no extra services, though its fare still
+# includes baggage.
+kind: recipe
+metadata:
+  prompt: Search Duffel's no-services test route
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: The Duffel Airways offer sells nothing extra
+overrides:
+  values:
+    search.origin: BTS
+    search.destination: ABV
+  assertions:
+    offer:
+      - type: predicate
+        expr: serviceCount == 0 && checkedBagServiceId == "" && firstSegmentBaggageCount > 0

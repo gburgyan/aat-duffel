@@ -1,0 +1,15 @@
+adapter: listUpsellOffers
+protocol: http
+
+request:
+  method: POST
+  path: /air/offers/{{offerId}}/upsell_offers
+  headers:
+    Content-Type: application/json
+  body: '{"data": {}}'
+
+response:
+  extract:
+    upsellOfferCount:
+      path: 'data.#'
+      optional: true

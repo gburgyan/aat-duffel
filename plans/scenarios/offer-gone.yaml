@@ -1,0 +1,47 @@
+# Duffel's LGW to LHR test route returns an offer that is no longer available when it's read:
+# 422 offer_no_longer_available, an airline_error.
+metadata:
+  prompt: Read an offer on Duffel's offer-no-longer-available test route
+  graphVersion: "1.0.0"
+intent:
+  goal: offer
+  description: Reading a stale offer answers 422 offer_no_longer_available
+
+execution:
+  steps:
+    - id: search
+      node: createOfferRequest
+      values:
+        origin: LGW
+        destination: LHR
+
+    - id: offers
+      node: listOffers
+      dependsOn: [search]
+      values:
+        offerRequestId: {from: search.offerRequestId}
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: zzOfferCount == 1
+
+    - id: offer
+      node: getOffer
+      dependsOn: [offers]
+      isGoal: true
+      values:
+        offerId:
+          from: offers.offers
+          select:
+            strategy: match
+            field: id
+            filter: ownerCode == "ZZ"
+      expectFailure:
+        status: [422]
+        description: The offer is gone by the time it's read
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: offer_no_longer_available
+            raw: true

@@ -1,0 +1,16 @@
+# Duffel's BTS to MRU test route returns an offer that includes no baggage for any passenger.
+kind: recipe
+metadata:
+  prompt: Search Duffel's no-baggage test route
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: The Duffel Airways offer includes no baggage
+overrides:
+  values:
+    search.origin: BTS
+    search.destination: MRU
+  assertions:
+    offer:
+      - type: predicate
+        expr: firstSegmentBaggageCount == 0

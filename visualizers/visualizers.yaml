@@ -1,0 +1,19 @@
+visualizers:
+  - id: offers
+    name: Offers
+    file: offers.html
+    match:
+      node: listOffers
+
+  - id: batch-offers
+    name: Offers in this batch
+    file: offers.html
+    match:
+      node: getBatchOfferRequest
+      bodyPath: data.offers
+
+  - id: seat-map
+    name: Seat map
+    file: seat-map.html
+    match:
+      bodyPath: data.0.cabins

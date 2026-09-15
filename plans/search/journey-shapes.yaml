@@ -1,0 +1,84 @@
+# The shapes a search can take, read from the offer requests alone: one-way, a round trip, an open jaw
+# that returns from a different airport, and a family with a child and an infant in premium economy.
+# Each asks for offers without returning them, so the responses stay small.
+metadata:
+  prompt: Search one-way, round trip, open jaw, and for a family
+  graphVersion: "1.0.0"
+intent:
+  goal: family
+  description: Check the slices and passengers of four kinds of search
+
+execution:
+  steps:
+    - id: oneWay
+      node: createOfferRequest
+      description: One adult, one slice
+      values:
+        origin: LHR
+        destination: JFK
+        departureDate: "{{today + 30 days}}"
+        passengerAges: [35]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: sliceCount == 1 && passengerCount == 1 && cabinClass == "economy" && liveMode == false
+
+    - id: roundTrip
+      node: createOfferRequest
+      description: Two adults, out and back a week later
+      values:
+        origin: LHR
+        destination: JFK
+        departureDate: "{{today + 30 days}}"
+        returnDate: "{{today + 37 days}}"
+        passengerAges: [35, 33]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: sliceCount == 2 && passengerCount == 2
+          - type: fieldEquals
+            path: data.slices.1.origin.iata_code
+            value: JFK
+            raw: true
+          - type: fieldEquals
+            path: data.slices.1.destination.iata_code
+            value: LHR
+            raw: true
+
+    - id: openJaw
+      node: createOfferRequest
+      description: An adult and a child, London to New York, then on to Los Angeles
+      values:
+        origin: LHR
+        destination: JFK
+        departureDate: "{{today + 30 days}}"
+        stopover: LAX
+        onwardDate: "{{today + 34 days}}"
+        passengerAges: [35, 8]
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: sliceCount == 2 && passengerCount == 2
+          - type: fieldEquals
+            path: data.slices.1.destination.iata_code
+            value: LAX
+            raw: true
+          - type: fieldEquals
+            path: data.passengers.1.age
+            value: 8
+            raw: true
+
+    - id: family
+      node: createOfferRequest
+      description: Two adults, a child, and an infant in premium economy
+      isGoal: true
+      values:
+        origin: LHR
+        destination: JFK
+        departureDate: "{{today + 30 days}}"
+        passengerAges: [40, 38, 8, 1]
+        cabinClass: premium_economy
+      assertions:
+        mechanical:
+          - type: predicate
+            expr: passengerCount == 4 && cabinClass == "premium_economy"

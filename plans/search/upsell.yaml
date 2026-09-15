@@ -1,0 +1,12 @@
+# Upsell offers, which Duffel Airways doesn't sell: 422 unsupported_action, an airline_error.
+kind: recipe
+metadata:
+  prompt: Ask for upsell offers on the Duffel Airways offer
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: One adult, economy, direct flights, then the refused upsell
+  addons: [Upsell Refused]
+overrides:
+  values:
+    offers.maxConnections: 0

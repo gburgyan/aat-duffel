@@ -1,0 +1,75 @@
+adapter: getOffer
+protocol: http
+
+request:
+  method: GET
+  path: /air/offers/{{offerId}}?return_available_services=true
+
+response:
+  extract:
+    offerId: data.id
+    ownerCode: data.owner.iata_code
+    liveMode: data.live_mode
+    totalAmount: data.total_amount
+    totalCurrency: data.total_currency
+    baseAmount: data.base_amount
+    taxAmount:
+      path: data.tax_amount
+      default: ""
+    expiresAt: data.expires_at
+    requiresInstantPayment: data.payment_requirements.requires_instant_payment
+    paymentRequiredBy:
+      path: data.payment_requirements.payment_required_by
+      default: ""
+    fareBrand:
+      path: data.slices.0.fare_brand_name
+      default: ""
+    changeAllowed:
+      path: data.conditions.change_before_departure.allowed
+      default: false
+    changePenalty:
+      path: data.conditions.change_before_departure.penalty_amount
+      default: ""
+    refundAllowed:
+      path: data.conditions.refund_before_departure.allowed
+      default: false
+    refundPenalty:
+      path: data.conditions.refund_before_departure.penalty_amount
+      default: ""
+    sliceCount: 'data.slices.#'
+    firstSliceSegmentCount: 'data.slices.0.segments.#'
+    firstSegmentStopCount:
+      path: 'data.slices.0.segments.0.stops.#'
+      default: 0
+    firstSegmentBaggageCount:
+      path: 'data.slices.0.segments.0.passengers.0.baggages.#'
+      default: 0
+    passengers:
+      path: data.passengers
+      fields:
+        id: id
+        type: type
+        age: age
+        loyaltyAccountCount: 'loyalty_programme_accounts.#'
+    services:
+      path: data.available_services
+      default: []
+      fields:
+        id: id
+        type: type
+        amount: total_amount
+        currency: total_currency
+        maxQuantity: maximum_quantity
+        bagType: metadata.type
+        maxWeightKg: metadata.maximum_weight_kg
+        passengerId: passenger_ids.0
+        segmentId: segment_ids.0
+    serviceCount:
+      path: 'data.available_services.#'
+      default: 0
+    checkedBagServiceId:
+      path: 'data.available_services.#(metadata.type=="checked").id'
+      default: ""
+    checkedBagAmount:
+      path: 'data.available_services.#(metadata.type=="checked").total_amount'
+      default: ""

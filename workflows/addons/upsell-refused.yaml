@@ -1,0 +1,20 @@
+execution:
+  steps:
+    - id: upsell
+      node: listUpsellOffers
+      description: Duffel Airways sells no upsell offers, and says so with an airline error
+      values:
+        offerId: AUTOWIRE
+      expectFailure:
+        status: [422]
+        description: Duffel Airways doesn't support the upsell action
+      assertions:
+        mechanical:
+          - type: fieldEquals
+            path: errors.0.code
+            value: unsupported_action
+            raw: true
+          - type: fieldEquals
+            path: errors.0.type
+            value: airline_error
+            raw: true

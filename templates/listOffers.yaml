@@ -1,0 +1,26 @@
+adapter: listOffers
+protocol: http
+
+request:
+  method: GET
+  path: /air/offers?offer_request_id={{offerRequestId}}&sort={{sort}}&limit={{limit}}{{?maxConnections}}&max_connections={{maxConnections}}{{/maxConnections}}{{?after}}&after={{after}}{{/after}}
+
+response:
+  extract:
+    offers:
+      path: data
+      fields:
+        id: id
+        ownerCode: owner.iata_code
+        totalAmount: total_amount
+        totalCurrency: total_currency
+        requiresInstantPayment: payment_requirements.requires_instant_payment
+    pageSize: 'data.#'
+    nextCursor:
+      path: meta.after
+      default: ""
+    zzOfferCount: 'data.#(owner.iata_code=="ZZ")#|#'
+    instantPaymentCount: 'data.#(payment_requirements.requires_instant_payment==true)#|#'
+    cheapestTotalAmount:
+      path: data.0.total_amount
+      default: ""

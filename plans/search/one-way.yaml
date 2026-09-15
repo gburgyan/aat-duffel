@@ -1,0 +1,21 @@
+# A one-way search, cheapest first, with direct flights only: the Duffel Airways offer read with its
+# services, priced for a balance payment, and its seat map. Nothing is booked.
+kind: recipe
+metadata:
+  prompt: Search LHR to JFK, then price the Duffel Airways offer and read its seat map
+  graphVersion: "1.0.0"
+selection:
+  workflow: Find Offer
+  description: One adult, economy, direct flights, thirty days out
+  addons: [Price Offer, Seat Map]
+overrides:
+  values:
+    offers.maxConnections: 0
+  assertions:
+    offer:
+      - type: predicate
+        expr: >-
+          ownerCode == "ZZ" && requiresInstantPayment == false && paymentRequiredBy != "" &&
+          checkedBagServiceId != "" &&
+          ((changeAllowed == true && changePenalty != "") || (changeAllowed == false && changePenalty == "")) &&
+          ((refundAllowed == true && refundPenalty != "") || (refundAllowed == false && refundPenalty == ""))
