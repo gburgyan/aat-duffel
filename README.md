@@ -1,5 +1,7 @@
 # aat-duffel
 
+[![weekly run](https://github.com/gburgyan/aat-duffel/actions/workflows/weekly.yml/badge.svg)](https://github.com/gburgyan/aat-duffel/actions/workflows/weekly.yml)
+
 The [Duffel](https://duffel.com) flights API in test mode, as an [AAT](https://github.com/gburgyan/aat) project. AAT
 is a command-line tool that models an API as a graph and runs long, multi-step test plans against it: here a graph
 describes each operation, workflows chain them, and plans prove what the API really does by running against Duffel's
@@ -9,8 +11,6 @@ something that no plan asserts yet, and it names Duffel's docs where they're the
 **Status:** places, reference data, search, offers, booking, what comes after booking, and the account features are
 done: 66 operations run by 47 plans that pass together in about three and a half minutes, with 14 layers crossed
 into matrices ([what's not covered](#not-covered-yet)).
-
-[![weekly run](https://github.com/gburgyan/aat-duffel/actions/workflows/weekly.yml/badge.svg)](https://github.com/gburgyan/aat-duffel/actions/workflows/weekly.yml)
 
 ```text
 $ aat run plan search/one-way
