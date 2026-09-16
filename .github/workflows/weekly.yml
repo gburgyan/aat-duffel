@@ -3,8 +3,8 @@ name: weekly run
 # Runs the whole project against Duffel's live test API once a week, so the numbers in the README are
 # reproducible from this repository. Weekly rather than nightly because every full batch leaves two
 # customer users and two airline credits on the account, which Duffel offers no way to delete. Skips
-# when the repository has no token. Nothing is uploaded: raw responses in _output/ can hold test-account
-# credentials, so the log is the record.
+# when the repository has no token. Each run's archives are uploaded, so what the API actually said
+# can be opened with `aat web`.
 on:
   schedule:
     - cron: "17 6 * * 1"
@@ -37,3 +37,32 @@ jobs:
         env:
           DUFFEL_ACCESS_TOKEN: ${{ secrets.DUFFEL_ACCESS_TOKEN }}
         run: aat run batch --env test-ci
+
+      - name: Say how to open the archives
+        if: always() && steps.token.outputs.present == 'true'
+        run: |
+          mkdir -p _output/runs
+          cat > _output/runs/HOW-TO-VIEW.md <<'EOF'
+          # The archives from this run
+
+          Every request and response of this batch, as AAT recorded it. Duffel's search
+          responses are large, so this is the biggest of the three projects' artifacts.
+
+          Unpack this artifact, then, with aat 0.2.0 or later on your PATH:
+
+              aat web --output .              # the whole batch in the browser
+              aat run show latest --output .  # the last run's steps, in the terminal
+
+          AAT redacts every credential it sent before writing an archive. The one Duffel
+          returns, the signing secret from `createWebhook`, belongs to a webhook the same
+          run deletes in cleanup.
+          EOF
+
+      # A failed run is when these are worth opening most, so they upload either way.
+      - name: Upload the run archives
+        if: always() && steps.token.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-archives
+          path: _output/runs/
+          retention-days: 14
