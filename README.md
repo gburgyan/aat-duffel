@@ -682,6 +682,7 @@ plans/matrix/       one plan per way of paying, plus a search, to run with layer
 plans/scenarios/    Duffel's test routes, search and order side
 plans/zz-no-live-orders.yaml   the guard that no order the package booked is left active
 visualizers/        the Offers, Seat map, Order, and Change offers tabs for the web UI
+docs/api/           generated from the graph: a page per node, and a diagram of the wiring
 docs/images/        the screenshots in this README
 ```
 
