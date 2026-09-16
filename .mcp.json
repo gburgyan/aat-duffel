@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "duffel-api": {"command": "aat", "args": ["mcp", "serve", "--persona", "api"]},
+    "duffel-test": {"command": "aat", "args": ["mcp", "serve", "--persona", "test"]}
+  }
+}

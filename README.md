@@ -1,13 +1,16 @@
 # aat-duffel
 
-The [Duffel](https://duffel.com) flights API in test mode, as an [AAT](https://github.com/gburgyan/aat) project. A
-graph describes each endpoint, workflows chain the endpoints, and plans prove what the API really does by running
-against Duffel's live test API. What this README says about Duffel comes from those runs. It says so where a run showed
+The [Duffel](https://duffel.com) flights API in test mode, as an [AAT](https://github.com/gburgyan/aat) project. AAT
+is a command-line tool that models an API as a graph and runs long, multi-step test plans against it: here a graph
+describes each operation, workflows chain them, and plans prove what the API really does by running against Duffel's
+live test API. What this README says about Duffel comes from those runs. It says so where a run showed
 something that no plan asserts yet, and it names Duffel's docs where they're the source.
 
 **Status:** places, reference data, search, offers, booking, what comes after booking, and the account features are
-done: 66 endpoints, all run by 47 plans that pass together in about three and a half minutes
-([what's not covered](#not-covered-yet)).
+done: 66 operations run by 47 plans that pass together in about three and a half minutes, with 14 layers crossed
+into matrices ([what's not covered](#not-covered-yet)).
+
+[![weekly run](https://github.com/gburgyan/aat-duffel/actions/workflows/weekly.yml/badge.svg)](https://github.com/gburgyan/aat-duffel/actions/workflows/weekly.yml)
 
 ```text
 $ aat run plan search/one-way
@@ -33,6 +36,24 @@ latest` shows the run:
 
 ![The run in the web UI: five passing steps with their status, timing, assertions, and displayed outputs](docs/images/run.png)
 
+## Three ways to read this project
+
+Three things at once, and they are the same files.
+
+- **A worked Duffel integration.** Each node names a Duffel endpoint, the inputs it takes, and the outputs worth
+  keeping; the templates are the exact requests. Duffel publishes no OpenAPI spec, so this graph is the
+  machine-readable description of the API, and every claim in it has a run behind it.
+- **A test suite Duffel's API could be run against.** 47 plans cover places, search, offers, booking, changes,
+  cancellation, and the account, each asserting what the API answered. Point it at any test-mode token and it says
+  what changed.
+- **A demonstration of AAT.** Workflows with slots, five layer axes crossed into a matrix, cleanup that cancels every
+  order, `repeat` for batch searches, and visualizers drawn from real responses. See
+  [AAT features on display](#aat-features-on-display).
+
+It is one of three such projects, with [aat-stripe](https://github.com/gburgyan/aat-stripe) and
+[aat-shippo](https://github.com/gburgyan/aat-shippo); [Real APIs](https://gburgyan.github.io/aat/examples/real-apis/)
+compares them.
+
 ## Getting started
 
 ### What you need
@@ -53,6 +74,8 @@ latest` shows the run:
   ```bash
   export DUFFEL_ACCESS_TOKEN=duffel_test_...
   ```
+
+### Nothing here can book a real flight
 
 Searches check that `live_mode` is false before anything is booked, so a live token stops a plan at its first search.
 Every order a plan books carries `metadata.source: aat-duffel` and is cancelled in cleanup, and the last plan in a
@@ -88,6 +111,27 @@ Long batches can use `--env test-ci`, which spaces requests 250 ms apart. Duffel
 token, but only 30 searches (`POST /air/offer_requests`), refused beyond that with 429 `rate_limit_exceeded` until the
 minute resets. Find Offer and Book Flight retry a refused search after the reset, so run one batch at a time: several
 at once, or `--parallel`, only waits longer.
+
+### Environments
+
+| Environment | What it does |
+|---|---|
+| `test` (default) | Duffel's test mode, with contact details from the ranges reserved for fiction |
+| `test-ci` | `test`, with request starts at least 250 ms apart, for long batches under Duffel's 30 searches a minute |
+
+## Point your coding assistant at it
+
+The same files are an MCP server. [`.mcp.json`](.mcp.json) registers two, and Claude Code loads them when it opens
+this directory; other clients take the same commands:
+
+- **`duffel-api`** (`aat mcp serve --persona api`): read-only tools that hand an assistant each operation's exact
+  request, the order calls go in, what each needs from the calls before it, the domain's rules, and sample responses
+  from real runs. Ask it for a client in your language and it has the whole workflow to work from, not a pile of
+  endpoint reference.
+- **`duffel-test`** (`--persona test`): the tools to write, validate, run, and debug plans against your own test
+  account, with `DUFFEL_ACCESS_TOKEN` in the environment.
+
+[MCP server](https://gburgyan.github.io/aat/mcp-server/) covers the tools, other clients, and the HTTP transport.
 
 ## See it in the web UI
 
@@ -264,7 +308,7 @@ createOrderCancellation:
 18 (one of them a quote a plan left unconfirmed), with 0 failures. Five plans cancelled their orders themselves, and
 the account plans deleted their group and webhook, so those entries show as released. Then
 [`zz-no-live-orders`](plans/zz-no-live-orders.yaml), which sorts last, reads every page of the account's orders and
-fails if one of the package's orders is still active:
+fails if one of the project's orders is still active:
 
 ```yaml
 - id: orders
@@ -343,7 +387,7 @@ and the time, and stops the plan if two offers still match:
 
 ## Layers and matrix runs
 
-A layer fills inputs a plan leaves unset. The package's layers vary the search on five axes. Every one sets an input of
+A layer fills inputs a plan leaves unset. The project's layers vary the search on five axes. Every one sets an input of
 `createOfferRequest`, so a change request keeps its own cabin and date.
 
 | Layers | Input | Values (and without the layer) |
@@ -440,12 +484,12 @@ passengers of the party it names, so a layer that changes those fails them by de
 
 ## What's exercised
 
-### Endpoints
+### Operations
 
 Each endpoint is a node in [`graph.yaml`](graph.yaml), with a template in [`templates/`](templates/). Every node runs in
 at least one plan, the cancellation nodes in cleanup.
 
-| Endpoint | Node | Run by |
+| Operation | Node | Proven by |
 |---|---|---|
 | `GET /places/suggestions` | `suggestPlaces` | [places](plans/reference/places.yaml), [airports-and-cities](plans/reference/airports-and-cities.yaml) |
 | `GET /air/airports`, `GET /air/airports/{id}` | `listAirports`, `getAirport` | [airports-and-cities](plans/reference/airports-and-cities.yaml) |
@@ -495,7 +539,7 @@ at least one plan, the cancellation nodes in cleanup.
 | [search/loyalty](plans/search/loyalty.yaml) | Duffel's test loyalty account attached to the offer's passenger, and still on the offer when it's read again |
 | [search/upsell](plans/search/upsell.yaml) | Duffel Airways refuses upsell offers: 422 `unsupported_action`, an `airline_error` |
 | [search/batch](plans/search/batch.yaml) | A batch search polled until no batches remain, with the Duffel Airways offers collected on the way |
-| [booking/instant-solo](plans/booking/instant-solo.yaml) | One adult booked and paid at once, at exactly the priced total. The order carries the package's tag and allows cancel, change, and update. |
+| [booking/instant-solo](plans/booking/instant-solo.yaml) | One adult booked and paid at once, at exactly the priced total. The order carries the project's tag and allows cancel, change, and update. |
 | [booking/instant-family-seats-bags](plans/booking/instant-family-seats-bags.yaml) | Two adults, a child, and an infant on a lap, with seats and extra bags. The order books exactly the services priced (in one run, 3 seats and 4 bags) and counts each passenger type. |
 | [booking/hold-couple](plans/booking/hold-couple.yaml) | Two adults held unpaid at the priced total, with a payment deadline and a price guarantee |
 | [booking/hold-then-pay-trio-seats](plans/booking/hold-then-pay-trio-seats.yaml) | An adult, a child, and an infant held with seats, then paid at the held total. The payment reads back, and the paid order's total is unchanged. |
@@ -519,7 +563,7 @@ at least one plan, the cancellation nodes in cleanup.
 | [account/webhooks](plans/account/webhooks.yaml) | A webhook created and listed, a second refused with `unsafe_unique`, and the first deactivated, then reactivated with two events. A failed ping is still recorded as a `ping.triggered` delivery with an event, and the deleted webhook is 404. |
 | [matrix/find-offer](plans/matrix/find-offer.yaml) | The Duffel Airways offer for whatever search the layers set, direct only, matching the search's airports, dates, slices, passengers, and cabins |
 | [matrix/pay-now](plans/matrix/pay-now.yaml), [matrix/hold](plans/matrix/hold.yaml), [matrix/hold-then-pay](plans/matrix/hold-then-pay.yaml) | One way of paying each, for whatever search the layers set, with the order matching the search as it's booked |
-| [zz-no-live-orders](plans/zz-no-live-orders.yaml) | Every page of the account's orders, read with `repeat.next`: none of the package's orders is still active |
+| [zz-no-live-orders](plans/zz-no-live-orders.yaml) | Every page of the account's orders, read with `repeat.next`: none of the project's orders is still active |
 
 ### Duffel's test routes
 
@@ -627,7 +671,7 @@ find them.
 
 ## AAT features on display
 
-| Feature | In this package |
+| Feature | In this project |
 |---|---|
 | Workflows, addons, and recipes | [Find Offer](workflows/find-offer.yaml), [Book Flight](workflows/book-flight.yaml), and their [addons](workflows/addons/). Most plans are short recipes that reuse them. |
 | Slots and layers | Book Flight's `payment` slot picks Pay Now, Hold, or Hold Then Pay, and [layers](layers/) set a search's area, cabin, lead time, journey, and party |
@@ -657,7 +701,7 @@ find them.
 
 - **Not in a plan yet:** recording an action taken elsewhere on an airline-initiated change (PATCH), cancelling an
   order with a change left pending, and redelivering a webhook event, which answered 500 in a run
-- **Needs Duffel to enable it:** on the account this package was built against, Stays and Cars answer 403, and cards
+- **Needs Duffel to enable it:** on the account this project was built against, Stays and Cars answer 403, and cards
   and 3-D Secure answer 403 `unavailable_feature`, so the order-side test routes that pay by card (LTN → STN,
   SEN → STN, and LCY → STN) aren't covered
 - **Left out, per Duffel's docs:** partial offer requests (deprecated), Payment Intents and Refunds (closed to new
@@ -680,7 +724,7 @@ plans/after-booking/  changes, cancellations, services, airline-initiated change
 plans/account/      customer users and groups, component client keys, Links sessions, and webhooks
 plans/matrix/       one plan per way of paying, plus a search, to run with layer groups
 plans/scenarios/    Duffel's test routes, search and order side
-plans/zz-no-live-orders.yaml   the guard that no order the package booked is left active
+plans/zz-no-live-orders.yaml   the guard that no order the project booked is left active
 visualizers/        the Offers, Seat map, Order, and Change offers tabs for the web UI
 docs/api/           generated from the graph: a page per node, and a diagram of the wiring
 docs/images/        the screenshots in this README
@@ -688,3 +732,7 @@ docs/images/        the screenshots in this README
 
 Run output goes to `_output/`, which git ignores, along with one-off `probes/`, `setup-*.sh`, `env.secrets*.yaml`, and
 `.env`, so a token kept in one of those never reaches the repository.
+
+## License
+
+Apache 2.0; see [LICENSE](LICENSE).
