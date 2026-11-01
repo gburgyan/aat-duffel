@@ -107,10 +107,11 @@ aat run show latest --step offer --outputs            # what a step extracted
 aat run show latest --step offer --response --path data.conditions
 ```
 
-Long batches can use `--env test-ci`, which spaces requests 250 ms apart. Duffel allows 4000 requests a minute per
-token, but only 30 searches (`POST /air/offer_requests`), refused beyond that with 429 `rate_limit_exceeded` until the
-minute resets. Find Offer and Book Flight retry a refused search after the reset, so run one batch at a time: several
-at once, or `--parallel`, only waits longer.
+Long batches can use `--env test-ci`, which spaces requests 550 ms apart. Duffel's `ratelimit-limit` headers allow 120
+requests a minute per token on nearly every endpoint, 30 searches (`POST /air/offer_requests`), and 4000 place
+suggestions, refused beyond that with 429 `rate_limit_exceeded` until the minute resets. Find Offer and Book Flight
+retry a refused search after the reset, so run one batch at a time: several at once, or `--parallel`, only waits
+longer.
 
 ### Environments
 
