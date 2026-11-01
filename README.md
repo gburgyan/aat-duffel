@@ -583,7 +583,7 @@ one.
 | LGW → LHR | an offer gone by the time it's read | [offer-gone](plans/scenarios/offer-gone.yaml): 422 `offer_no_longer_available` |
 | LHR → LGW | an order the airline fails | [order-creation-error](plans/scenarios/order-creation-error.yaml): 502 `airline_unknown`, an `airline_error`, and no order |
 | LGW → STN | a balance too low to pay | [insufficient-balance](plans/scenarios/insufficient-balance.yaml): 422 `insufficient_balance`, an `invalid_state_error`, and no order |
-| LHR → STN | a price that rises with every read | [price-changed-at-booking](plans/scenarios/price-changed-at-booking.yaml): the second read costs more, and paying the first read's total is 422 `payment_amount_does_not_match_order_amount`, with no order |
+| LHR → STN | a price that rises after the search | [price-changed-at-booking](plans/scenarios/price-changed-at-booking.yaml): the first read of the offer costs more than the search listed, and paying the listed total is 422 `payment_amount_does_not_match_order_amount`, with no order |
 | LHR → LTN | airline-initiated changes | [airline-initiated-change](plans/after-booking/airline-initiated-change.yaml): one change after one read, accepted, and the flight's time moved |
 | LTN → SYD | a refund as airline credits | [cancel-to-airline-credits](plans/after-booking/cancel-to-airline-credits.yaml): the quote refunds to `airline_credits`, with one credit |
 

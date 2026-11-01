@@ -1,12 +1,13 @@
-# Duffel's LHR to STN test route raises the offer's price on every read. The second read costs more than
-# the first, and an order paid at the first read's total is refused: 422
+# Duffel's LHR to STN test route changes the offer's price between the search and the first read: the
+# search lists one total, the offer read answers a higher one, and later reads keep it. (Until October
+# 2026 the route raised the price on every read.) An order paid at the listed total is refused: 422
 # payment_amount_does_not_match_order_amount, a validation_error. No order is created.
 metadata:
   prompt: Book a stale price on Duffel's price change test route
   graphVersion: "1.0.0"
 intent:
   goal: book
-  description: The price rises between reads, and an order paid at the old price is refused
+  description: The price rises after the search, and an order paid at the listed price is refused
 
 execution:
   steps:
@@ -24,6 +25,7 @@ execution:
     - id: offers
       node: listOffers
       dependsOn: [search]
+      description: The Duffel Airways offer, at the total the search listed
       values:
         offerRequestId: {from: search.offerRequestId}
         limit: 200
@@ -35,6 +37,7 @@ execution:
     - id: offer
       node: getOffer
       dependsOn: [offers]
+      description: Read once, the offer already costs more than the search listed
       values:
         offerId:
           from: offers.offers
@@ -42,29 +45,27 @@ execution:
             strategy: match
             field: id
             filter: ownerCode == "ZZ"
-
-    - id: reread
-      node: getOffer
-      dependsOn: [offer]
-      description: The same offer read again costs more
-      values:
-        offerId: {from: offer.offerId}
       assertions:
         mechanical:
+          # The route lists one offer, so the page's cheapest total is this offer's listed price.
           - type: predicate
-            expr: 'totalAmount > "{{offer.totalAmount}}"'
+            expr: 'totalAmount > "{{offers.cheapestTotalAmount}}"'
 
     - id: book
       node: createOrder
-      dependsOn: [reread]
+      dependsOn: [offer]
       isGoal: true
-      description: Pay the first read's total, which the order no longer costs
+      description: Pay the listed total, which the order no longer costs
+      selections:
+        listed:
+          from: offers.offers
+          filter: ownerCode == "ZZ"
       values:
         orderType: instant
         offerId: {from: offer.offerId}
         bookingPassengers: {from: offer.bookingPassengers}
-        amount: {from: offer.totalAmount}
-        currency: {from: offer.totalCurrency}
+        amount: {fromSelection: listed.totalAmount}
+        currency: {fromSelection: listed.totalCurrency}
       expectFailure:
         status: [422]
         description: The payment doesn't match the order's current total
