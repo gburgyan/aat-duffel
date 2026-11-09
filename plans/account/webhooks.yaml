@@ -45,15 +45,18 @@ execution:
       expectFailure:
         status: [422]
         description: Duffel allows one webhook per mode
+      # The type is the documented category; the field is what the refusal is about: one webhook per
+      # organisation and mode. The code is neither documented nor stable: it was unsafe_unique until
+      # November 2026 and is validation_unique since, with the same status, type, title, and field.
       assertions:
         mechanical:
           - type: fieldEquals
-            path: errors.0.code
-            value: unsafe_unique
-            raw: true
-          - type: fieldEquals
             path: errors.0.type
             value: validation_error
+            raw: true
+          - type: fieldEquals
+            path: errors.0.source.field
+            value: identity_organisation_id
             raw: true
 
     - id: deactivate

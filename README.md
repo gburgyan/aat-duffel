@@ -561,7 +561,7 @@ at least one plan, the cancellation nodes in cleanup.
 | [account/customer-users-and-groups](plans/account/customer-users-and-groups.yaml) | A user created, read, replaced with PUT, and found by email. A group with the user in it, read, renamed, listed, and shown on the user. Client keys with no claims, for the user, and for an unknown user. The group deleted and then 404, and a second user with the same email 422 `emails_not_unique`. |
 | [account/order-for-customer-user](plans/account/order-for-customer-user.yaml) | An order booked for a user names the user, listing orders by `user_id` finds exactly that order, and a client key covers the user and the order |
 | [account/links-sessions](plans/account/links-sessions.yaml) | A session with its required fields gets a URL on links.duffel.com, and one without them is 422 with four `validation_required` errors |
-| [account/webhooks](plans/account/webhooks.yaml) | A webhook created and listed, a second refused with `unsafe_unique`, and the first deactivated, then reactivated with two events. A failed ping is still recorded as a `ping.triggered` delivery with an event, and the deleted webhook is 404. |
+| [account/webhooks](plans/account/webhooks.yaml) | A webhook created and listed, a second refused as a duplicate for the organisation, and the first deactivated, then reactivated with two events. A failed ping is still recorded as a `ping.triggered` delivery with an event, and the deleted webhook is 404. |
 | [matrix/find-offer](plans/matrix/find-offer.yaml) | The Duffel Airways offer for whatever search the layers set, direct only, matching the search's airports, dates, slices, passengers, and cabins |
 | [matrix/pay-now](plans/matrix/pay-now.yaml), [matrix/hold](plans/matrix/hold.yaml), [matrix/hold-then-pay](plans/matrix/hold-then-pay.yaml) | One way of paying each, for whatever search the layers set, with the order matching the search as it's booked |
 | [zz-no-live-orders](plans/zz-no-live-orders.yaml) | Every page of the account's orders, read with `repeat.next`: none of the project's orders is still active |
@@ -661,7 +661,9 @@ find them.
 - **A Links session answers with a URL and nothing else.** The URL is on links.duffel.com, with the session token in
   its query string. Without `reference` and the three redirect URLs, a session is 422 with a `validation_required`
   error for each.
-- **One webhook per mode, and a ping needs a receiver.** A second webhook is 422 `unsafe_unique`, and the signing
+- **One webhook per mode, and a ping needs a receiver.** A second webhook is a 422 `validation_error` on
+  `identity_organisation_id`; its undocumented code changed from `unsafe_unique` to `validation_unique` in November
+  2026, so no plan asserts it. The signing
   secret comes back only when a webhook is created. With nothing behind the URL, a ping is 422
   `webhook_client_error`, yet Duffel records the delivery: a `ping.triggered` event with the status the URL answered
   (405 from example.com in the runs). A deleted webhook is 404 to update. Redelivering the event answered 500
