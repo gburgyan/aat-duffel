@@ -247,11 +247,12 @@ concepts:
 
   webhooks:
     description: >-
-      A webhook (end_) is created with a url and events, and its signing secret comes back only then. An
-      account holds one per mode: a second is a 422 validation_error on identity_organisation_id. Its code
-      is undocumented and changed (unsafe_unique, then validation_unique in November 2026), so assert the
-      type and the field, never the code. PATCH sets active and
-      events. With nothing behind the URL, a ping is 422 webhook_client_error, yet Duffel records a
+      A webhook (end_) is created with a url and events, and its signing secret comes back only then. A
+      mode holds several webhooks (Duffel documents up to 52), each at its own URL: a second at the same
+      URL is a 422 validation_error on url. Until November 2026 a mode held one, and a second at any URL
+      was refused on identity_organisation_id. The code is undocumented and has been renamed
+      (unsafe_unique, then validation_unique), so assert the type and the field, never the code. PATCH
+      sets active and events. With nothing behind the URL, a ping is 422 webhook_client_error, yet Duffel records a
       delivery (del_) of a ping.triggered event (wev_) with the status the URL answered, readable from
       GET /air/webhooks/deliveries and GET /air/webhooks/events/{id}. DELETE answers 204, and updating a
       deleted webhook is 404 not_found. Redelivering the event answered 500 internal_server_error in a

@@ -2291,8 +2291,8 @@ nodes:
 
   createWebhook:
     description: >-
-      Register a webhook (POST /air/webhooks, 201). Duffel allows one per live mode, and the signing secret
-      comes back only here; no output holds it. Cleanup deletes the webhook.
+      Register a webhook (POST /air/webhooks, 201). Each webhook in a mode needs its own URL, and the
+      signing secret comes back only here; no output holds it. Cleanup deletes the webhook.
     adapter: createWebhook
     tags: [account, webhooks]
     inputs:

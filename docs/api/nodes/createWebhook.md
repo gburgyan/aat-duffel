@@ -1,6 +1,6 @@
 ### createWebhook
 
-Register a webhook (POST /air/webhooks, 201). Duffel allows one per live mode, and the signing secret comes back only here; no output holds it. Cleanup deletes the webhook.
+Register a webhook (POST /air/webhooks, 201). Each webhook in a mode needs its own URL, and the signing secret comes back only here; no output holds it. Cleanup deletes the webhook.
 
 **Adapter:** `createWebhook`
 
@@ -9,7 +9,7 @@ Register a webhook (POST /air/webhooks, 201). Duffel allows one per live mode, a
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | url | string | yes | https://example.com/aat-duffel/webhooks |  |
-| events | string[] | yes | [order.created] |  |
+| events | string[] | yes | ["order.created"] |  |
 
 **Outputs:**
 

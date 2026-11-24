@@ -24,7 +24,7 @@ graph TD
     createOrderChange["createOrderChange<br/>Choose a change offer (POST /air/order_changes,..."]
     createOrderChangeRequest["createOrderChangeRequest<br/>Ask what it costs to replace an order's slice w..."]
     createPayment["createPayment<br/>Pay a held order (POST /air/payments, 201), fro..."]
-    createWebhook["createWebhook<br/>Register a webhook (POST /air/webhooks, 201). D..."]
+    createWebhook["createWebhook<br/>Register a webhook (POST /air/webhooks, 201). E..."]
     deleteCustomerUserGroup["deleteCustomerUserGroup<br/>Delete a customer user group (DELETE /identity/..."]:::cleanup
     deleteWebhook["deleteWebhook<br/>Delete a webhook (DELETE /air/webhooks/{id})."]:::cleanup
     getAircraft["getAircraft<br/>Read one aircraft type by its arc_ ID (GET /air..."]
@@ -222,7 +222,7 @@ Quote the cancellation, confirm it, and check the refund on the cancelled order;
 - [**createOrderChange**](nodes/createOrderChange.md) — Choose a change offer (POST /air/order_changes, 201), which makes a pending change with its cost. Nothing changes on the order until confirmOrderChange.
 - [**createOrderChangeRequest**](nodes/createOrderChangeRequest.md) — Ask what it costs to replace an order's slice with another (POST /air/order_change_requests, 201). The request removes one slice and adds a journey on a new date in a requested cabin, and answers with change offers, each with its added flight, what it costs, and the order's new total.
 - [**createPayment**](nodes/createPayment.md) — Pay a held order (POST /air/payments, 201), from the balance or with an airline credit, with amount and currency exactly the order's total.
-- [**createWebhook**](nodes/createWebhook.md) — Register a webhook (POST /air/webhooks, 201). Duffel allows one per live mode, and the signing secret comes back only here; no output holds it. Cleanup deletes the webhook.
+- [**createWebhook**](nodes/createWebhook.md) — Register a webhook (POST /air/webhooks, 201). Each webhook in a mode needs its own URL, and the signing secret comes back only here; no output holds it. Cleanup deletes the webhook.
 - [**deleteCustomerUserGroup**](nodes/deleteCustomerUserGroup.md) — Delete a customer user group (DELETE /identity/customer/user_groups/{id}).
 - [**deleteWebhook**](nodes/deleteWebhook.md) — Delete a webhook (DELETE /air/webhooks/{id}).
 - [**getAircraft**](nodes/getAircraft.md) — Read one aircraft type by its arc_ ID (GET /air/aircraft/{id}, 200).
@@ -293,7 +293,7 @@ Quote the cancellation, confirm it, and check the refund on the cancelled order;
 | [createOrderChange](nodes/createOrderChange.md) | Choose a change offer (POST /air/order_changes, 201), which makes a pending change with its cost. Nothing changes on the order until confirmOrderChange. | 1 | 9 |
 | [createOrderChangeRequest](nodes/createOrderChangeRequest.md) | Ask what it costs to replace an order's slice with another (POST /air/order_change_requests, 201). The request removes one slice and adds a journey on a new date in a requested cabin, and answers with change offers, each with its added flight, what it costs, and the order's new total. | 6 | 7 |
 | [createPayment](nodes/createPayment.md) | Pay a held order (POST /air/payments, 201), from the balance or with an airline credit, with amount and currency exactly the order's total. | 5 | 5 |
-| [createWebhook](nodes/createWebhook.md) | Register a webhook (POST /air/webhooks, 201). Duffel allows one per live mode, and the signing secret comes back only here; no output holds it. Cleanup deletes the webhook. | 2 | 6 |
+| [createWebhook](nodes/createWebhook.md) | Register a webhook (POST /air/webhooks, 201). Each webhook in a mode needs its own URL, and the signing secret comes back only here; no output holds it. Cleanup deletes the webhook. | 2 | 6 |
 | [deleteCustomerUserGroup](nodes/deleteCustomerUserGroup.md) | Delete a customer user group (DELETE /identity/customer/user_groups/{id}). | 1 | 0 |
 | [deleteWebhook](nodes/deleteWebhook.md) | Delete a webhook (DELETE /air/webhooks/{id}). | 1 | 0 |
 | [getAircraft](nodes/getAircraft.md) | Read one aircraft type by its arc_ ID (GET /air/aircraft/{id}, 200). | 1 | 3 |

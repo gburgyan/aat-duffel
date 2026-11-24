@@ -1,5 +1,5 @@
 # A webhook with no receiver behind its URL. It is created with its signing secret (which no output keeps)
-# and listed; a second webhook in the same mode is refused. It is deactivated, then reactivated with a
+# and listed; a second webhook at the same URL is refused. It is deactivated, then reactivated with a
 # second event. A ping fails, since nothing receives it, but Duffel still records the delivery: a
 # ping.triggered event that reads back. The webhook is deleted, and updating it afterwards is 404.
 # Cleanup has nothing left to do.
@@ -37,17 +37,17 @@ execution:
           - type: predicate
             expr: webhookCount == 1 && ourWebhookCount == 1 && activeWebhookCount == 1
 
-    - id: secondHook
+    - id: sameUrl
       node: createWebhook
       dependsOn: [hooks]
       values:
-        url: https://example.com/aat-duffel/second
+        url: {from: hook.url}
       expectFailure:
         status: [422]
-        description: Duffel allows one webhook per mode
-      # The type is the documented category; the field is what the refusal is about: one webhook per
-      # organisation and mode. The code is neither documented nor stable: it was unsafe_unique until
-      # November 2026 and is validation_unique since, with the same status, type, title, and field.
+        description: Each webhook in a mode needs its own URL
+      # Duffel allowed one webhook per mode until November 2026 and now allows several, each at its own
+      # URL, so the refusal left to prove is the URL clash. The type is the documented category and the
+      # field is the URL; the code (validation_unique) is undocumented and was renamed once already.
       assertions:
         mechanical:
           - type: fieldEquals
@@ -56,12 +56,12 @@ execution:
             raw: true
           - type: fieldEquals
             path: errors.0.source.field
-            value: identity_organisation_id
+            value: url
             raw: true
 
     - id: deactivate
       node: updateWebhook
-      dependsOn: [secondHook]
+      dependsOn: [sameUrl]
       values:
         webhookId: {from: hook.webhookId}
         active: false
